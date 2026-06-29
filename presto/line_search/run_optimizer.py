@@ -1,22 +1,15 @@
 import numpy as np
-from test_functions import *
-from norms import l2_norm
+from presto.test_functions import *
+from presto.linalg import *
+from presto.line_search.step_length import backtracking
+from presto.line_search.direction import gradient_descent, newton, quasi_newton
 import matplotlib.pyplot as plt
 from functools import partial
-from utils import timer
-from plotting import plot_contour, plot_iterations
+from presto.utils import timer
+from presto.plotting import plot_contour, plot_iterations
 
 plt.ion()
 
-def steepest_descent(func, x, grad=None, *args, **kwargs):
-    """
-    Need to add general gradient function
-    """
-    if grad is not None:
-        p = - grad
-    else:
-        p = - func.gradient(x, *args, **kwargs) 
-    return p 
 
 def test_terminal_steepest_descent(p, grad):
     grad_norm = l2_norm(grad)
@@ -36,29 +29,12 @@ def test_terminal_steepest_descent(p, grad):
 
     return res
 
-def newton_direction(func, x, grad=None, hessian=None, *args, **kwargs):
-    if grad is not None:
-        g = grad 
-    else:
-        g = func.gradient(x, *args, **kwargs)
-    if hessian is not None:
-        H = hessian 
-    else:
-        H = func.hessian(x, *args, **kwargs)
-    return - invert_matrix(H) @ g
-
-
-def quasi_newton(func, x, *args, **kwargs):
-    g = func.gradient(x, *args, **kwargs)
-    B = bfgs(func, x)
-    p = - B @ g
-    return p
 
 @timer
-def line_search(func, x, search_direction, a0=1, prev_alpha=False, c = 1e-4, rho=0.5, eps=1e-5, max_iter=100, *args, **kwargs):
+def minimize(func, x, search_direction, a0=1, prev_alpha=False, c = 1e-4, rho=0.5, eps=1e-5, max_iter=100, *args, **kwargs):
     x = np.asarray(x, dtype=float)
     f = partial(func, *args, **kwargs)
-    g = partial(func.gradient, *args, **kwargs)
+    g = partial(func.gradient, *args, **kwargs) # if gradient defined explicitly, else general gradient approximation method
     p = partial(search_direction, func, *args, **kwargs)
 
     x_cur = x
@@ -73,7 +49,7 @@ def line_search(func, x, search_direction, a0=1, prev_alpha=False, c = 1e-4, rho
     num_iters = 0
 
     while not (converged(g_cur) or num_iters >= max_iter):
-        alpha, x_next, f_next = backtracking_line_search(func, x_cur, f_cur, g_cur, p_cur, a0, c = c, rho=rho, *args, **kwargs)
+        alpha, x_next, f_next = backtracking(func, x_cur, f_cur, g_cur, p_cur, a0, c = c, rho=rho, *args, **kwargs)
         x_cur = x_next 
         f_cur = f_next 
         g_cur = g(x_cur) 
@@ -87,41 +63,13 @@ def line_search(func, x, search_direction, a0=1, prev_alpha=False, c = 1e-4, rho
 
     return x_cur, f_cur, iterations
 
-def backtracking_line_search(func, x_cur, f_cur, g_cur, p_cur, a0, c = 1e-4, rho=0.5, *args, **kwargs):
-    if a0 < 0:
-        raise ValueError("step length must be positive")
-    if not (0 < c < 1):
-        raise ValueError("sufficient decrease param must be between 0 and 1")
-    if not (0 < rho < 1):
-        raise ValueError("step length contraction factor must be between 0 and 1")
-    
-    alpha = a0
-    f = partial(func, *args, **kwargs)  
-    x_next = x_cur + alpha * p_cur
-    f_next = f(x_next) 
 
-    while f_next > f_cur + c * alpha * g_cur @ p_cur:
-        alpha *= rho
-        x_next = x_cur + alpha * p_cur
-        f_next = f(x_next)
-
-    return alpha, x_next, f_next
 
 def check_convergence(gradient, eps=1e-4):
     """
     TODO: Use test_terminal_steepest_descent 
     """      
-    return np.allclose(l2_norm(gradient), 0, rtol=eps)
-
-def minimise(func):
-    pass
-
-def bfgs(func, x):
-    pass
-
-def invert_matrix(A):
-    return np.linalg.inv(A)
-    
+    return np.allclose(l2_norm(gradient), 0, rtol=eps) 
 
 
 def summarise_function(func, x):
@@ -150,16 +98,19 @@ def summarise_search(func, line_search_method, min_x, min_f, iterations, save_re
         pass
 
 def main():
+    """
+    create function for easy comparison of any 2+ methods - direction and step length
+    """
     x0 = np.array([-1.2, 1.0])
     #x0 = np.array([1.2, 1.2])
     objective_func = rosenbrock
     summarise_function(objective_func, x0)
 
-    s_min_x, s_min_f, s_iterations = line_search(objective_func, x0, steepest_descent, prev_alpha=False)
-    summarise_search(objective_func, steepest_descent, s_min_x, s_min_f, s_iterations, save_results=False)
+    s_min_x, s_min_f, s_iterations = minimize(objective_func, x0, gradient_descent, prev_alpha=False)
+    summarise_search(objective_func, gradient_descent, s_min_x, s_min_f, s_iterations, save_results=False)
 
-    n_min_x, n_min_f, n_iterations = line_search(objective_func, x0, newton_direction)
-    summarise_search(objective_func, newton_direction, n_min_x, n_min_f, n_iterations, save_results=False)
+    n_min_x, n_min_f, n_iterations = minimize(objective_func, x0, newton)
+    summarise_search(objective_func, newton, n_min_x, n_min_f, n_iterations, save_results=False)
 
     plt.show(block=True)
 

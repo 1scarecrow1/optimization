@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 from functools import partial
 from matplotlib.colors import LogNorm
 import numpy as np 
-from norms import l2_norm
+from presto.linalg import l2_norm
 
 def evaluate(f, x_vals): # or batch
     return np.array([f(x) for x in x_vals])
@@ -15,7 +15,7 @@ def evaluate_func_and_gradient(func, x_vals, *args, **kwargs):
 
     return evaluate(f, x_vals), evaluate(g, x_vals) 
 
-def plot_function(func, min_val = -2, max_val = 3, num=50, n=2, grad=False, a=1, b=100, *args, **kwargs):
+def plot_function(func, min_val = -2, max_val = 3, num=50, n=2, grad=False, *args, **kwargs):
     coords = np.stack(
         np.meshgrid(*([np.linspace(min_val, max_val, num)]*n), indexing='ij'), 
         axis=0

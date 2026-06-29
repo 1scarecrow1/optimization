@@ -10,3 +10,7 @@ def l2_norm(x):
         return np.sqrt(np.max(eigs))
     else:
         raise NotImplementedError(f"not defined for {x.ndim}-dimensional object yet")
+    
+
+def invert_matrix(A):
+    return np.linalg.inv(A)
