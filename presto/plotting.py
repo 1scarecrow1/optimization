@@ -5,7 +5,7 @@ import numpy as np
 from presto.linalg import l2_norm
 
 def evaluate(f, x_vals): # or batch
-    return np.array([f(x) for x in x_vals])
+    return np.array([f(x) for x in x_vals]) # vectorise
 
 def evaluate_func_and_gradient(func, x_vals, *args, **kwargs):
     grad = func.gradient
@@ -74,16 +74,20 @@ def draw_numbered_path(ax, points, line_color="white", point_color="red"):
         )
 
 def name_of(obj, default="f"):
+    if isinstance(obj, str):
+        return obj
     if isinstance(obj, partial):
         obj = obj.func
     return getattr(obj, "__name__", default)
 
-def plot_contour(func, x_vals, method=None, n=2, *args, **kwargs):
+def plot_contour(func, x_vals, direction=None, line_search_method=None, func_name=None, n=2, *args, **kwargs):
     if n != 2:
         return
 
-    fname = name_of(func)
-    mname = name_of(method) if method is not None else ""
+    fname = name_of(func) if func_name is None else func_name
+    dname = name_of(direction) if direction is not None else ""
+    mname = name_of(line_search_method) if line_search_method is not None else ""
+    suffix = f"{fname}" + (f" — {dname} with {mname}" if dname and mname else "")
 
     x1_min, x1_max = x_vals[:, 0].min() - 0.5, x_vals[:, 0].max() + 0.5
     x2_min, x2_max = x_vals[:, 1].min() - 0.5, x_vals[:, 1].max() + 0.5
@@ -121,18 +125,20 @@ def plot_contour(func, x_vals, method=None, n=2, *args, **kwargs):
     fig.colorbar(cf, ax=ax, label="f(x)")
     ax.set_xlabel("x1")
     ax.set_ylabel("x2")
-    ax.set_title(f"{fname} iterates" + (f" — {mname}" if mname else ""))
+    ax.set_title(suffix)
 
     plt.pause(0.001)
 
-def plot_iterations(func_vals, grad_vals, search_directions, func=None, method=None):
+def plot_iterations(func_vals, grad_vals, search_directions, func_name=None, line_search_method=None, direction=None):
     n = len(func_vals)
     grad_vals = np.asarray(grad_vals)
     search_directions = np.asarray(search_directions)
 
-    fname = name_of(func) if func is not None else ""
-    mname = name_of(method) if method is not None else ""
-    suffix = (f" — {fname}" if fname else "") + (f" ({mname})" if mname else "")
+    fname = name_of(func_name) if func_name is not None else ""
+    dname = name_of(direction) if direction is not None else ""
+    mname = name_of(line_search_method) if line_search_method is not None else ""
+
+    suffix = (f" — {fname} —" if fname else "") + (f" {dname} with" if dname else "") + (f" {mname}" if mname else "")
 
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(13, 10))
 

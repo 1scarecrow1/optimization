@@ -1,118 +1,192 @@
 import numpy as np
 from presto.test_functions import *
 from presto.linalg import *
-from presto.line_search.step_length import backtracking
-from presto.line_search.direction import gradient_descent, newton, quasi_newton
+from presto.line_search.line_search import *
+from presto.line_search.direction import *
+from presto.line_search.optimize import *
 import matplotlib.pyplot as plt
-from functools import partial
 from presto.utils import timer
 from presto.plotting import plot_contour, plot_iterations
+from types import SimpleNamespace
+import argparse
 
 plt.ion()
 
-
-def test_terminal_steepest_descent(p, grad):
-    grad_norm = l2_norm(grad)
-    p_norm = l2_norm(p)
-    grad_val = - grad / grad_norm
-    angle = - grad @ p / (grad_norm * p_norm)
-    converges = np.allclose(p, grad_val, rtol=1e-5)
-
-    res = {
-        "Steepest descent direction is unit negative gradient vector": converges, 
-        "search direction": p,
-        "Angle is minimum": angle == 1,
-        "Angle": angle
-    }
-    if not converges:
-        res["Search direction off by"] = 100 * l2_norm(p - grad_val) / p_norm
-
-    return res
-
-
-@timer
-def minimize(func, x, search_direction, a0=1, prev_alpha=False, c = 1e-4, rho=0.5, eps=1e-5, max_iter=100, *args, **kwargs):
-    x = np.asarray(x, dtype=float)
-    f = partial(func, *args, **kwargs)
-    g = partial(func.gradient, *args, **kwargs) # if gradient defined explicitly, else general gradient approximation method
-    p = partial(search_direction, func, *args, **kwargs)
-
-    x_cur = x
-    f_cur = f(x_cur) 
-    g_cur = g(x_cur) 
-    p_cur = p(x_cur, g_cur)
-    alpha = a0
-
-    iterations = [{'step': 0, 'x': x_cur, 'func': f_cur, 'grad': g_cur, 'search_direction': p_cur}]
-
-    converged = partial(check_convergence, eps=eps) 
-    num_iters = 0
-
-    while not (converged(g_cur) or num_iters >= max_iter):
-        alpha, x_next, f_next = backtracking(func, x_cur, f_cur, g_cur, p_cur, a0, c = c, rho=rho, *args, **kwargs)
-        x_cur = x_next 
-        f_cur = f_next 
-        g_cur = g(x_cur) 
-        p_cur = p(x_cur, g_cur)
-
-        iterations.append({'step': alpha, 'x': x_cur, 'func': f_cur, 'grad': g_cur, 'search_direction': p_cur})
-        num_iters += 1
-  
-        if prev_alpha:
-            a0 = alpha
-
-    return x_cur, f_cur, iterations
-
-
-
-def check_convergence(gradient, eps=1e-4):
-    """
-    TODO: Use test_terminal_steepest_descent 
-    """      
-    return np.allclose(l2_norm(gradient), 0, rtol=eps) 
-
-
 def summarise_function(func, x):
-    r = func(x)
-    g = func.gradient(x)
-    h = func.hessian(x)
-    print(f"func value at {x}: {r}")
-    print(f"gradient: {g}")
-    print(f"Hessian: {h}")
-    
+    fx = func(x)
+    gx = func.gradient(x)
+    hx = func.hessian(x)
+    summary = {
+        "At point": x,
+        "func": round(fx, 6),
+        "gradient": gx,
+        "hessian": hx
+    }
+    return SimpleNamespace(**summary)
+  
+def summarise_search(result, display_all=False, save_results=False):
 
-def summarise_search(func, line_search_method, min_x, min_f, iterations, save_results=False):
-    print(f"{line_search_method.__name__} for {func.__name__}")
-    print(f"Min value: {round(min_f, 4)}, at {min_x}, found in {len(iterations)-1} iterations")
-    steps = np.array([it["step"] for it in iterations])
-    x_vals = np.array([it["x"] for it in iterations])
-    func_vals = np.array([it["func"] for it in iterations])
-    grad_vals = np.array([it["grad"] for it in iterations])
-    search_directions = np.array([it["search_direction"] for it in iterations])
+    func_name = result.func.__name__
+    f_min = result.f_min
+    x_min = result.x
+    iterations = result.iterations
+    line_search_method = result.line_search_method if isinstance(result.line_search_method, str) else result.line_search_method.__name__
+    direction = result.search_direction if isinstance(result.search_direction, str) else result.search_direction.__name__
 
-    print(f"steps: {steps}")
-    plot_contour(func, x_vals, method=line_search_method)
-    plot_iterations(func_vals, grad_vals, search_directions, func=func, method=line_search_method)
+    print(f"Minimising {func_name} with {direction} - {line_search_method}")
+    print(f"min value: {round(f_min, 8)}, at {x_min}, found in {len(iterations)-1} iterations")
+
+    if display_all:
+        display_keys = ['iter', 'step', 'x', 'func', 'grad']
+        for iteration in iterations:
+            line = " | ".join(
+                f"{key}: {iteration[key]}"
+                for key in display_keys
+            )
+            print(line)
 
     if save_results:
         pass
 
+    #return summary, 
+
+def plot_results(result, func_name=None, save_results=False):
+    iterations = result.iterations 
+    func = result.func
+    func_name = result.func.__name__ if func_name is None else func_name
+
+    iterations = result.iterations
+    line_search_method = result.line_search_method if isinstance(result.line_search_method, str) else result.line_search_method.__name__
+    direction = result.search_direction if isinstance(result.search_direction, str) else result.search_direction.__name__
+    x_vals = np.array([it["x"] for it in iterations])
+    func_vals = np.array([it["func"] for it in iterations])
+    grad_vals = np.array([it["grad"] for it in iterations])
+    search_directions = np.array([it["search_direction"] for it in iterations])  
+
+    plot_contour(func, x_vals, direction, line_search_method, func_name=func_name) 
+    plot_iterations(func_vals, grad_vals, search_directions, func_name=func_name, 
+                    line_search_method=line_search_method, direction=direction) 
+
+    if save_results:
+        pass
+
+
+def parse_x0(s):
+    return np.array([float(v) for v in s.split(",")])
+
+def run_optimizer(objective_func, x0, direction, line_search_method, func_name=None, prev_alpha=False, save_results=False, **params):
+    res = minimize(objective_func, x0, direction, line_search_method, prev_alpha=prev_alpha, **params)
+    summarise_search(res, display_all=True, save_results=save_results) 
+    plot_results(res, func_name=func_name, save_results=save_results)
+
 def main():
     """
-    create function for easy comparison of any 2+ methods - direction and step length
+    TODO: create function for easy comparison of any 2+ methods - direction and step length
     """
     x0 = np.array([-1.2, 1.0])
     #x0 = np.array([1.2, 1.2])
-    objective_func = rosenbrock
-    summarise_function(objective_func, x0)
 
-    s_min_x, s_min_f, s_iterations = minimize(objective_func, x0, gradient_descent, prev_alpha=False)
-    summarise_search(objective_func, gradient_descent, s_min_x, s_min_f, s_iterations, save_results=False)
+    objective_func = rosenbrock    
+    func_summary = summarise_function(objective_func, x0)
+    print(func_summary)
 
-    n_min_x, n_min_f, n_iterations = minimize(objective_func, x0, newton)
-    summarise_search(objective_func, newton, n_min_x, n_min_f, n_iterations, save_results=False)
+    line_search_methods = {
+        'backtracking': {'c': 1e-4, 'rho': 0.5},
+        'wolfe': {},
+    }
+
+    initial_step = {'a0': 1.0}
+
+    sd_params = {
+        'search_direction': 'gradient_descent', 
+        'line_search_method': 'backtracking', 
+        'direction_args': {},
+        'line_search_args': line_search_methods['backtracking']
+    }
+    newton_params = {
+        'search_direction': 'newton', 'line_search_method': 'backtracking', 
+        'direction_args': {},
+        #{'prev_alpha': False},
+        'line_search_args': line_search_methods['backtracking']
+    }
+    quasi_newton_args = {'update_inv': False}
+
+    bfgs_params = {
+        'search_direction': 'bfgs', 'line_search_method': 'backtracking', 
+        'direction_args': quasi_newton_args,
+        'line_search_args': line_search_methods['backtracking']
+    }
+
+    optimizer_params = {'conv_tol': 1e-5, 'max_iter':100}
+    save_results=False
+
+
+    # res_s = minimize(objective_func, x0, **sd_params,
+    #          prev_alpha=False, 
+    #          **optimizer_params)    
+    # summarise_search(res_s, display_all=False) 
+    ## plot_results(res_s, save_results=save_results)
+
+    # res_n = minimize(objective_func, x0, **newton_params,                 
+    #                 prev_alpha=False, **optimizer_params)    
+    # summarise_search(res_n, display_all=False) 
+    # plot_results(res_n, save_results=save_results)
+
+    res_b = minimize(objective_func, x0, bfgs, 'backtracking', 
+             direction_args=quasi_newton_args,
+             line_search_args = line_search_methods['backtracking'],
+             prev_alpha=False, 
+             **optimizer_params)
+    summarise_search(res_b, display_all=False) 
+    #plot_results(res_b, save_results=save_results)
 
     plt.show(block=True)
+
+OBJECTIVES = {
+    "rosenbrock": rosenbrock,
+}
+
+DIRECTIONS = {
+    "gradient_descent": gradient_descent,
+    "newton": newton,
+    "quasi_newton": quasi_newton,
+}
+
+LINE_SEARCH_METHODS = {
+    "backtracking": backtracking,
+}
+
+def run():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--objective_func", default="rosenbrock")
+    parser.add_argument("--x0", type=parse_x0, default="-1.2,1.0")
+    parser.add_argument("--direction", default="newton")
+    parser.add_argument("--line_search", default="backtracking")
+    parser.add_argument("--prev_alpha", default=False)
+
+    parser.add_argument("--a0", type=float, default=1)
+    parser.add_argument("--c", type=float, default=1e-4)
+    parser.add_argument("--rho", type=float, default=0.5)
+    parser.add_argument("--eps", type=float, default=1e-5)
+    parser.add_argument("--max_iter", type=int, default=100)
+
+    args = parser.parse_args()
+
+    result = minimize(
+        OBJECTIVES[args.objective],
+        args.x0,
+        DIRECTIONS[args.direction],
+        LINE_SEARCH_METHODS[args.line_search],
+        a0=args.a0,
+        prev_alpha=args.prev_alpha,
+        c=args.c,
+        rho=args.rho,
+        eps=args.eps,
+        max_iter=args.max_iter,
+    )
+
+    print(result)
 
 if __name__ == "__main__":
     main()
