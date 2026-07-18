@@ -2,7 +2,8 @@ import numpy as np
 from presto.utils import timer
 
 def l2_norm(x):
-    nx = x.ndim
+    x = np.array(x)
+    nx = np.ndim(x)
     if nx == 0:
         return np.abs(x)
     elif nx == 1:
@@ -12,22 +13,44 @@ def l2_norm(x):
         return np.sqrt(np.max(eigs))
     else:
         raise NotImplementedError(f"not defined for {x.ndim}-dimensional object yet")
-    
+
+def inverse(x):
+    x = np.array(x)
+    nx = np.ndim(x)
+    if nx == 0:
+        return 1 / x if not np.isclose(x, 0.0) else np.inf  
+    elif nx == 1:
+        return 1 / x 
+    elif nx == 2:
+        return invert_matrix(x)
+
 def invert_matrix(A):
     if not is_square(A):
-        raise ValueError("Matrix must be square")
+        return moore_penrose_inverse(A)
     if not is_nonsingular(A):
         raise ValueError("Matrix is singular")
     return solve_matrix(A, np.identity(A.shape[0]))
+
+def moore_penrose_inverse(A, left=False):
+    if np.ndim(A) != 2:
+        raise TypeError("argument must be a matrix with shape (m, n)")
+    if left:
+        I = np.identity(A.shape[0])
+        A_inv_l = A.T @ np.linalg.solve(A @ A.T, I) 
+        return A_inv_l
+    I = np.identity(A.shape[1])
+    A_inv_r = np.linalg.solve(A.T @ A, I) @ A.T 
+    return A_inv_r
 
 def condition_number(x):
     if x.ndim != 2:
         raise ValueError(f"{x} must be a matrix.")
     
-    max_sv = l2_norm(x)
-    inv_min_sv = l2_norm(invert_matrix(x))
+    eigvals = np.linalg.eigvals(x)
+    max_sv = max(eigvals)
+    min_sv = min(eigvals)
 
-    return max_sv * inv_min_sv
+    return max_sv / min_sv
 
 def eigendecomposition(A):
     if is_symmetric(A):
@@ -73,9 +96,10 @@ def solve(A, b):
 def solve_cholesky(A, b):
     if not is_positive_definite(A):
         raise ValueError(f"{A} must be symmetric positive definite")
-    U = cholesky(A)
-    y = forward_substitution(U.T, b)
-    x = backward_substitution(U, y)
+    #U = cholesky(A)
+    L = np.linalg.cholesky(A)
+    y = forward_substitution(L, b)
+    x = backward_substitution(L.T, y)
     return x
 
 def solve_matrix(A, B):
@@ -382,7 +406,7 @@ def is_positive_definite(A):
 def is_positive_semi_definite(A):
     if not is_orthonally_diagonalisable(A):
         return False
-    return np.all(gaussian_pivots(A) >= 0)
+    return np.all(gaussian_pivots(A) >= 0) # or min eigval >= 0
 
 def is_negative_definite(A):
     if not is_orthonally_diagonalisable(A):

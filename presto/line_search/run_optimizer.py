@@ -83,16 +83,16 @@ def main():
     """
     TODO: create function for easy comparison of any 2+ methods - direction and step length
     """
-    x0 = np.array([-1.2, 1.0])
-    #x0 = np.array([1.2, 1.2])
+    #x0 = np.array([-1.2, 1.0])
+    x0 = np.array([1.2, 1.2])
 
     objective_func = rosenbrock    
     func_summary = summarise_function(objective_func, x0)
     print(func_summary)
 
     line_search_methods = {
-        'backtracking': {'c': 1e-4, 'rho': 0.5},
-        'wolfe': {},
+        'backtracking': {'a0': 1.0, 'c': 1e-4, 'rho': 0.5},
+        'wolfe': {'a_max': 1.0, 'a1':1.0, 'a0': 0, 'c1':1e-4, 'c2':0.9, 'max_trials':3},
     }
 
     initial_step = {'a0': 1.0}
@@ -109,7 +109,7 @@ def main():
         #{'prev_alpha': False},
         'line_search_args': line_search_methods['backtracking']
     }
-    quasi_newton_args = {'update_inv': False}
+    quasi_newton_args = {'update_inv': True}
 
     bfgs_params = {
         'search_direction': 'bfgs', 'line_search_method': 'backtracking', 
@@ -132,13 +132,21 @@ def main():
     # summarise_search(res_n, display_all=False) 
     # plot_results(res_n, save_results=save_results)
 
-    res_b = minimize(objective_func, x0, bfgs, 'backtracking', 
+    res_bb = minimize(objective_func, x0, bfgs, 'backtracking', 
              direction_args=quasi_newton_args,
              line_search_args = line_search_methods['backtracking'],
              prev_alpha=False, 
              **optimizer_params)
-    summarise_search(res_b, display_all=False) 
-    #plot_results(res_b, save_results=save_results)
+    summarise_search(res_bb, display_all=False) 
+    plot_results(res_bb, save_results=save_results)
+
+    res_bw = minimize(objective_func, x0, bfgs, 'wolfe', 
+             direction_args=quasi_newton_args,
+             line_search_args = line_search_methods['wolfe'],
+             prev_alpha=False, 
+             **optimizer_params)
+    summarise_search(res_bw, display_all=False) 
+    plot_results(res_bw, save_results=save_results)
 
     plt.show(block=True)
 
@@ -146,15 +154,7 @@ OBJECTIVES = {
     "rosenbrock": rosenbrock,
 }
 
-DIRECTIONS = {
-    "gradient_descent": gradient_descent,
-    "newton": newton,
-    "quasi_newton": quasi_newton,
-}
 
-LINE_SEARCH_METHODS = {
-    "backtracking": backtracking,
-}
 
 def run():
     parser = argparse.ArgumentParser()

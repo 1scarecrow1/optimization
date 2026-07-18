@@ -1,6 +1,8 @@
 from collections import namedtuple
 import numpy as np
 from presto.linalg import *
+from presto.gradients import gradient, hessian, gradient_func, hessian_func
+from presto.solvers.newton import newton_iteration
 from presto.utils import resolve_func, merge_args
 
 #TODO: resolve grad/hess 
@@ -8,48 +10,38 @@ from presto.utils import resolve_func, merge_args
 DescentDirectionOutput = namedtuple("DescentDirectionOutput", "p")
 QuasiNewtonOutput = namedtuple("QuasiNewtonOutput", "p B")
 
-def gradient_descent(func, x, grad=None, *args, **kwargs):  
-    if grad is not None:
-        p = - grad
-    else:
-        p = - func.gradient(x, *args, **kwargs) 
+def gradient_descent(func, x, grad=None, **kwargs):  
+    p = - gradient(func, x, grad, **kwargs)
     return DescentDirectionOutput(p) 
 
-def newton(func, x, grad=None, hess=None, *args, **kwargs):
-    if grad is not None:
-        g = grad 
-    else:
-        g = func.gradient(x, *args, **kwargs)
-    if hess is not None:
-        H = hess
-    else:
-        H = func.hessian(x, *args, **kwargs)
-    p = - invert_matrix(H) @ g
+def newton(func, x, grad=None, hess=None, **kwargs):
+    gx = gradient(func, x, grad, **kwargs)
+    hx = hessian(func, x, hess, grad, **kwargs)   
+    p = newton_iteration(gx, hx)
     return DescentDirectionOutput(p)
 
-def quasi_newton(func, x_cur, g_cur, x_next=None, g_next=None, B_cur=None, hessian_update_method=None, update_inv=True):
+def quasi_newton(func, x_cur, g_cur, x_next=None, g_next=None, B_cur=None, hessian_update_method=None, update_inv=True, m=1.0):
     if x_next is None or g_next is None:
-        return QuasiNewtonOutput(-g_cur, np.identity(len(x_cur)))
+        B_inv = m * (1/l2_norm(g_cur)) * np.identity(len(x_cur))  
+        return QuasiNewtonOutput(-g_cur, B_inv)
 
     if update_inv:
         B_inv = update_inv_hessian(x_cur, g_cur, x_next, g_next, B_cur)
-        p = - B_inv @ g_next
+        p = newton_iteration(g_next, B_inv, inv=True)
         return QuasiNewtonOutput(p, B_inv)
 
     hessian_update = resolve_hessian_update_method(hessian_update_method) 
     B = hessian_update(x_cur, g_cur, x_next, g_next, B_cur)
-    B_inv = invert_matrix(B)
-
-    p = - B_inv @ g_next
+    p = newton_iteration(g_next, B)
     return QuasiNewtonOutput(p, B)
 
 def bfgs(func, x_cur, g_cur, x_next=None, g_next=None, B_cur=None, update_inv=True):
     return quasi_newton(func, x_cur, g_cur, x_next, g_next, B_cur, hessian_update_method='bfgs', update_inv=update_inv)
 
-def bfgs_update(x_cur, g_cur, x_next=None, g_next=None, B_cur=None):
+def bfgs_update(x_cur, g_cur, x_next=None, g_next=None, B_cur=None, m=1.0):
     n = len(x_cur)
     if x_next is None:
-        return np.identity(n)
+        return (1/m) * l2_norm(g_cur) * np.identity(n)
 
     s = x_next - x_cur 
     y = g_next - g_cur 
@@ -74,9 +66,9 @@ def symmetric_rank_one(x_cur, g_cur, x_next=None, g_next=None, B_cur=None):
     B_next = B_cur +  np.outer(a, a.T) / c
     return B_next
 
-def update_inv_hessian(x_cur, g_cur, x_next=None, g_next=None, inv_B_cur=None):
+def update_inv_hessian(x_cur, g_cur, x_next=None, g_next=None, inv_B_cur=None, m=1.0):
     if x_next is None:
-        return np.identity(len(x_cur))  
+        return m * (1/l2_norm(g_cur)) * np.identity(len(x_cur))  
     
     s = x_next - x_cur 
     y = g_next - g_cur 
@@ -84,11 +76,10 @@ def update_inv_hessian(x_cur, g_cur, x_next=None, g_next=None, inv_B_cur=None):
     if c <= 0: # check
         raise ValueError("Secant equation only accepts positive Hessian approximations")
     rho = 1 / c
-    V_cur = inv_B_cur  
     I = np.identity(len(s))
-    a = I - rho * np.outer(s, y)
-    V_next = a @ V_cur @ a +rho * np.outer(s, s)
-    return V_next
+    A = I - rho * np.outer(s, y)
+    inv_B_next = A @ inv_B_cur @ A + rho * np.outer(s, s)
+    return inv_B_next
 
 def modified_newton(func, x, grad=None, hess=None, modified_hess=None, mod_method=None, eps=None, *args, **kwargs):
     '''
