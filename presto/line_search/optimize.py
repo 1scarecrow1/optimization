@@ -1,7 +1,7 @@
 from functools import partial 
 import numpy as np 
 from presto.linalg import * 
-from presto.line_search.direction import DIRECTIONS, QUASI_NEWTON, SECOND_ORDER_DIRECTIONS
+from presto.solvers.solvers import DIRECTIONS, QUASI_NEWTON, resolve_direction_method
 from presto.line_search.line_search import LINE_SEARCH_METHODS
 from presto.gradients import gradient_func, hessian_func
 from presto.utils import timer, resolve_func, merge_args
@@ -14,38 +14,38 @@ class MinimizeResult:
     f_min: float
     iterations: list[dict]
     func: Callable
-    search_direction: Callable | str
+    solver: Callable | str
     line_search_method: Callable | str
 
 
 @timer
-def minimize(func, x, search_direction, line_search_method, 
+def minimize(func, x, solver, line_search_method, 
              grad=None, hess=None, 
-             func_args = None, direction_args = None, line_search_args = None,
+             func_args = None, solver_args = None, line_search_args = None,
              prev_alpha=False, # step length should be separate or part of line search
              conv_tol=1e-5, max_iter=100):
     '''
-    Minimizes using line search methods and directions
+    Minimizes using line search methods 
     '''
     func_args = func_args or {}
-    direction_args = direction_args or {}
+    solver_args = solver_args or {}
     line_search_args = line_search_args or {}
-    a0 = line_search_args['a0'] if line_search_args else 1.0
+    a0 = line_search_args.get('a0', 1.0)
 
     x = np.asarray(x, dtype=float)
 
-    direction = resolve_direction_method(search_direction)
+    direction = resolve_direction_method(solver)
     line_search_func = resolve_line_search_method(line_search_method)
     gradient = gradient_func(func, grad, **func_args)    
 
     f = partial(func, **func_args)
     g = partial(gradient, **func_args) if not isinstance(gradient, partial) else gradient 
-    p = partial(direction, func, **merge_args(func_args, direction_args))
+    p = partial(direction, func, **merge_args(func_args, solver_args))
     line_search = partial(line_search_func, func, **merge_args(func_args, line_search_args))
 
-    if direction in SECOND_ORDER_DIRECTIONS:
-        hessian = hessian_func(func, hess, **func_args)
-        h = partial(hessian, **func_args) if not isinstance(hessian, partial) else hessian
+    # if direction in SECOND_ORDER_DIRECTIONS:
+    #     hessian = hessian_func(func, hess, **func_args)
+    #     h = partial(hessian, **func_args) if not isinstance(hessian, partial) else hessian
     
     alpha = a0
     x_cur = x
@@ -54,7 +54,8 @@ def minimize(func, x, search_direction, line_search_method,
     p_cur = p(x_cur, g_cur)
 
     num_iters = 0
-    iterations = [{'iter': num_iters, 'step': 0, 'x': x_cur, 'func': f_cur, 'grad': g_cur, 'search_direction': p_cur.p}]
+    iterations = [{'iter': num_iters, 'step': 0, 'x': x_cur, 
+                   'func': f_cur, 'grad': g_cur, 'search_direction': p_cur.p}]
     converged = partial(check_convergence, conv_tol=conv_tol) 
 
     while not (converged(g_cur) or num_iters >= max_iter): 
@@ -65,7 +66,7 @@ def minimize(func, x, search_direction, line_search_method,
         if direction in QUASI_NEWTON:
             p_cur = p(x_cur, g_cur, x_next, g_next, p_cur.B)
         else:
-            p_cur = p(x_cur, g_cur) 
+            p_cur = p(x_next, g_next) 
 
         x_cur = x_next 
         f_cur = f_next 
@@ -83,7 +84,7 @@ def minimize(func, x, search_direction, line_search_method,
         f_min=f_cur,
         iterations=iterations,
         func=func,
-        search_direction=search_direction,
+        solver=solver,
         line_search_method=line_search_method,
     )
 
@@ -115,8 +116,7 @@ def test_terminal_steepest_descent(p, grad):
 def resolve_line_search_method(f, methods=LINE_SEARCH_METHODS, name="line search"):
     return resolve_func(f, methods, name)
     
-def resolve_direction_method(f, methods=DIRECTIONS, name='direction'):
-    return resolve_func(f, methods, name)
+
 
 
 

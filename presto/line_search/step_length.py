@@ -24,7 +24,7 @@ def solve_cubic_interp_one(a0, a1, f_0, f_1, f_cur, g_cur):
     v = f_v - g_cur*s - f_cur
     x = c * A @ v 
     a, b = x 
-    return -b + np.sqrt(b**2 - 3*a*g_cur) / (3*a)
+    return (-b + np.sqrt(b**2 - 3*a*g_cur)) / (3*a)
 
 def cubic_interpolate(a1, a0, f1, f0, g1, g0):
     d1 = g0 + g1 - 3*(f0 - f1) / (a1 - a0)
@@ -47,17 +47,17 @@ def bisection(f, a, b):
     TODO: Add termination criteria
     '''
     c = (a + b) / 2
-    mid = l2_norm(f(c))
+    mid = f(c)
     if np.isclose(mid, 0):
         return c 
     
     while not np.isclose(mid, 0):
         if np.sign(mid) != np.sign(l2_norm(f(a))):
             c = (a+c) / 2
-            mid = l2_norm(f(c))
+            mid = f(c)
         else:
             c = (c+b) / 2
-            mid = l2_norm(f(c))
+            mid = f(c)
     return c 
 
    

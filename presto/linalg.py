@@ -1,35 +1,219 @@
+from dataclasses import dataclass
 import numpy as np
 from presto.utils import timer
+from scipy.sparse import csc_array, csc_matrix, diags, issparse, identity
+from scipy.sparse.linalg import splu, spilu, SuperLU, spsolve_triangular
+import scipy.sparse.linalg as sla
+import scipy
+from scipy.linalg import cho_factor, lu_factor, cho_solve, lu_solve
+
+def ssor(A, omega=1.2):
+    '''
+    Symmetric successive overrelaxation of form A = L + D + L.T for symmetric PD A to solve Ax=b
+    '''
+    A = np.array(A)
+    d = np.diag(A)
+    L = np.tril(A, -1)
+    D = np.diag(d)
+    D_inv = np.diag(1.0 / d)
+    b = D + omega*L
+    return b @ D_inv @ b.T / (omega * (2-omega))
+
+
+def incomplete_LU(A, explicit=False, sparse_array=True):
+    '''
+    Incomplete LU factorisation of square matrix A
+    '''
+    A = csc_array(A, dtype=float)
+    lu = spilu(A)
+    if explicit:
+        if not sparse_array:
+            return lu.L.toarray(), lu.U.toarray()
+        return lu.L, lu.U
+    return lu
+
+def incomplete_cholesky(A, explicit=False, sparse_array=True, lower=True):
+    '''
+    Incomplete cholesky factorisation of symmetric PD A
+    Uses spilu with no permutation and pivoting 
+    spilu returns LU = LDL.T, where U = DL.T -> lower triangular factor is L*D^1/2
+    '''
+    A = csc_array(A, dtype=float)
+    lu = spilu(A, permc_spec='NATURAL', diag_pivot_thresh=0.0) 
+    if explicit:
+        D = lu.U.diagonal()
+        mat = lu.L @ diags(np.sqrt(D))
+        if not lower:
+            mat = mat.T 
+        if not sparse_array:
+            return mat.toarray()
+        return mat
+    return lu
+    
+def inexact_modified_cholesky(A):
+    '''
+    T is diag(norms of columns of A). B = T^-1/2 * A * T^-1/2
+    Perform Cholesky factorisation on B + alpha*I by incrementally increasing alpha and making 
+    diagonal elements more positive
+    '''
+    t = np.linalg.norm(A, axis=0)
+    t_sqrt = np.sqrt(t)
+    T_sqrt_inv = np.diag(1/t_sqrt)
+    B = T_sqrt_inv @ A @ T_sqrt_inv
+    beta = l2_norm(B)
+
+    if np.min(np.diag(B)) > 0:
+        alpha = 0 
+    else:
+        alpha = beta/2
+
+    I = np.identity(A.shape[0])
+    while True:
+        try:
+            L = np.linalg.cholesky(B + alpha*I)   
+            return t_sqrt * L
+        except np.linalg.LinAlgError:
+            alpha = max(2*alpha, beta/2)
+
+def incomplete_cholesky_shifted(A, alpha0=1e-8, grow=2.0):
+    A = csc_array(A, dtype=float)
+    diag = A.diagonal()
+    scale = np.abs(diag).max()
+    alpha = 0.0
+    while True:
+        try:
+            lu = spilu(A + alpha * identity(A.shape[0]), permc_spec='NATURAL', diag_pivot_thresh=0.0)
+            if np.all(lu.U.diagonal() > 0):
+                return lu, alpha
+        except RuntimeError:
+            pass
+        alpha = max(alpha * grow, alpha0 * scale)   
+
+
+def regularised_cholesky(A, eps=1e-3, factor=10):
+    d = np.diag(A)
+    I = np.identity(len(d))
+    min_d = np.min(d)
+    t = 0.0 if min_d > 0 else -min_d + eps
+    while True:
+        try:
+            return np.linalg.cholesky(A + t * I)
+        except np.linalg.LinAlgError:
+            t = max(factor*t, eps)
+
+def factorised_solver(A, lower=True):
+    '''
+    Returns (lower-triangular) factor (Cholesky/LU) and prefactorised solver y()
+    '''
+    if isinstance(A, np.ndarray):
+        try:
+            cho_fac = cho_factor(A, lower=lower)
+            y = lambda x: cho_solve(cho_fac, x)
+            # if not lower:
+            #     U, lower = cho_factor(A, lower=False)
+            #     y = lambda r: cho_solve((U, lower), r)
+            # else:
+            #     L, lower = cho_factor(A, lower=True)
+            #     y = lambda r: cho_solve((L, lower), r)
+            M = cho_fac[0]
+        except np.linalg.LinAlgError:
+            lu, piv = lu_factor(A)
+            y = lambda x: lu_solve((lu, piv), x)
+            if lower:
+                M = np.tril(lu, k=-1) + np.eye(A.shape[0]) 
+            else:
+                M = np.triu(lu)
+        #M = A
+    elif isinstance(A, SuperLU): 
+        if not lower:
+            M = A.U.toarray()
+        else:
+            M = A.L.toarray()
+        y = A.solve
+    elif issparse(A): 
+        # incomplete Cholesky factor G, A = G*G.T or A = G.T * G
+        # Apply M^{-1} = (G Gᵀ)^{-1} via two sparse triangular solves, O(nnz) each
+        if not lower:
+            Gt = A.tocsr()
+            G = Gt.T.tocsr()
+            M = Gt
+        else:
+            G = A.tocsr()
+            Gt = G.T.tocsr()
+            M = G
+        def y(r):
+            w = spsolve_triangular(G, r, lower=True)
+            return spsolve_triangular(Gt, w, lower=False)
+    else:
+        raise TypeError('invalid preconditioning method')
+    return y, M
+
 
 def l2_norm(x):
-    x = np.array(x)
+    x = np.asarray(x, dtype=float)
     nx = np.ndim(x)
     if nx == 0:
         return np.abs(x)
     elif nx == 1:
         return np.sqrt(x @ x)
-    elif nx == 2:
-        eigs = np.linalg.eigvalsh(x.T @ x)
-        return np.sqrt(np.max(eigs))
+    # elif nx == 2: use SVD, do not square condition number
+    #     eigs = np.linalg.eigvalsh(x.T @ x)
+    #     return np.sqrt(np.max(eigs))
+    elif nx==2:
+        return np.linalg.norm(x, 2)
     else:
         raise NotImplementedError(f"not defined for {x.ndim}-dimensional object yet")
+
+
+
+def ssor_preconditioner(A, omega=1.2):
+    """
+    Creates an SSOR preconditioner LinearOperator for SciPy iterative solvers.
+    A should be a symmetric positive-definite matrix (csc_matrix).
+    """
+    if not isinstance(A, csc_matrix):
+        A = csc_matrix(A)
+    
+    n = A.shape[0]
+    # Extract diagonal (D), lower (L), and upper (U) parts
+    D = A.diagonal()
+    L = -A.multiply(A.indices < A.indptr[:-1, np.newaxis])
+    U = -A.multiply(A.indices > A.indptr[:-1, np.newaxis])
+
+    # Preconditioner apply function
+    def matvec(b):
+        x = np.zeros_like(b, dtype=np.float64)
+        
+        # 1. Forward Sweep: (D + omega*L) * x_half = omega * b
+        # Using a direct solver for the triangular matrix
+        for i in range(n):
+            sum_val = L[i, :i] @ x[:i]
+            x[i] = (omega * b[i] - (omega - 1) * D[i] * x[i] - omega * sum_val) / D[i]
+            
+        # 2. Backward Sweep: (D + omega*U) * x_new = omega * D * x_half + (1-omega)*D*x_half ...
+        # (Alternatively, the full SSOR matrix inverse is approximated)
+        x_half = x.copy()
+        for i in range(n - 1, -1, -1):
+            sum_val = U[i, i+1:] @ x_half[i+1:]
+            x[i] = (omega * b[i] - (omega - 1) * D[i] * x_half[i] - omega * sum_val) / D[i]
+        return x
+
+    return sla.LinearOperator(A.shape, matvec=matvec)
 
 def inverse(x):
     x = np.array(x)
     nx = np.ndim(x)
-    if nx == 0:
-        return 1 / x if not np.isclose(x, 0.0) else np.inf  
-    elif nx == 1:
-        return 1 / x 
+    if nx <= 1:
+        return np.where(np.isclose(x, 0.0), np.inf, 1 / x)  
     elif nx == 2:
         return invert_matrix(x)
 
 def invert_matrix(A):
+    if is_diagonal(A):
+        return np.diag(1.0/np.diag(A))
     if not is_square(A):
         return moore_penrose_inverse(A)
-    if not is_nonsingular(A):
-        raise ValueError("Matrix is singular")
-    return solve_matrix(A, np.identity(A.shape[0]))
+    return np.linalg.solve(A, np.identity(A.shape[0]))
 
 def moore_penrose_inverse(A, left=False):
     if np.ndim(A) != 2:
@@ -45,10 +229,9 @@ def moore_penrose_inverse(A, left=False):
 def condition_number(x):
     if x.ndim != 2:
         raise ValueError(f"{x} must be a matrix.")
-    
-    eigvals = np.linalg.eigvals(x)
-    max_sv = max(eigvals)
-    min_sv = min(eigvals)
+    s = np.linalg.svd(x, compute_uv=False)
+    max_sv = np.abs(s[0])
+    min_sv = np.abs(s[-1])
 
     return max_sv / min_sv
 
@@ -80,27 +263,30 @@ def svd(x):
 
 
 def solve(A, b):
-    if is_positive_definite(A):
-        return solve_cholesky(A, b)
-    elif is_square(A) and (not 0 in np.diag(A)):
-        P, L, U = LUdecomposition_with_pivoting(A)
-        b = P @ b
-    else:
-        raise NotImplementedError
+    try:
+        x = solve_cholesky(A, b)
+    except np.linalg.LinAlgError:
+        if not is_square(A):
+            b = A.T @ b
+            A = A.T @ A 
+        if not 0 in np.diag(A):
+            P, L, U = LUdecomposition_with_pivoting(A)
+            b = P @ b
+        else:
+            raise NotImplementedError
 
-    y = forward_substitution(L, b)
-    x = backward_substitution(U, y)
+        y = forward_substitution(L, b)
+        x = backward_substitution(U, y)
 
     return x
 
 def solve_cholesky(A, b):
-    if not is_positive_definite(A):
-        raise ValueError(f"{A} must be symmetric positive definite")
-    #U = cholesky(A)
-    L = np.linalg.cholesky(A)
+    try:
+        L = np.linalg.cholesky(A)
+    except np.linalg.LinAlgError:
+        print("matrix must be symmetric positive definite")
     y = forward_substitution(L, b)
-    x = backward_substitution(L.T, y)
-    return x
+    return backward_substitution(L.T, y)
 
 def solve_matrix(A, B):
     n, p = B.shape
@@ -377,10 +563,10 @@ def is_PSD(A):
     return is_positive_semi_definite(A)
 
 def is_ND(A):
-    return is_positive_definite(A)
+    return is_negative_definite(A)
 
 def is_NSD(A):
-    return is_positive_semi_definite(A)
+    return is_negative_semi_definite(A)
 
 def is_symmetric(A):
     return is_square(A) and np.allclose(A, A.T)
@@ -399,39 +585,51 @@ def is_orthonally_diagonalisable(A):
     return is_symmetric(A)  
 
 def is_positive_definite(A):
-    if not is_orthonally_diagonalisable(A):
-        return False
-    return np.all(gaussian_pivots(A) > 0)
+    # if not is_orthonally_diagonalisable(A):
+    #     return False
+    # return np.all(gaussian_pivots(A) > 0)
+    # if not is_symmetric(A):
+    #     return False
+    # try:
+    #     np.linalg.cholesky(A)
+    #     return True
+    # except np.linalg.LinAlgError:
+    #     return False
+    r = _sym_eigs(A)
+    return r is not None and np.all(r[0] > r[1])
 
 def is_positive_semi_definite(A):
-    if not is_orthonally_diagonalisable(A):
-        return False
-    return np.all(gaussian_pivots(A) >= 0) # or min eigval >= 0
+    r = _sym_eigs(A)
+    return r is not None and np.all(r[0] >= -r[1])
 
 def is_negative_definite(A):
-    if not is_orthonally_diagonalisable(A):
-        return False
-    return np.all(gaussian_pivots(A) < 0)
+    r = _sym_eigs(A)
+    return r is not None and np.all(r[0] < -r[1])
 
 def is_negative_semi_definite(A):
-    if not is_orthonally_diagonalisable(A):
-        return False
-    return np.all(gaussian_pivots(A) <= 0)
+    r = _sym_eigs(A)
+    return r is not None and np.all(r[0] <= r[1])
 
 def is_indefinite(A):
-    if not is_orthonally_diagonalisable(A):
-        return False
-    return not (is_positive_semi_definite(A) or is_negative_semi_definite(A))
+    r = _sym_eigs(A)
+    return r is not None and np.any(r[0] > r[1]) and np.any(r[0] < -r[1])
+
+def _sym_eigs(A):
+    A = np.asarray(A, dtype=float)
+    if not is_symmetric(A):
+        return None
+    w = np.linalg.eigvalsh(A)
+    return w, np.finfo(np.float64).eps * max(1.0, np.abs(w).max())   # (eigs, tolerance)
 
 def inertia(A):
-    m = gaussian_pivots(A)
+    m = np.linalg.eigvals(np.asarray(A, dtype=float))
     pos = np.sum(m > 0)
     neg = np.sum(m < 0)
     return pos, neg, len(m) - pos - neg
 
 def eigenvalues(A):
     if is_diagonal(A):
-        return np.sort(np.diag(A), kind='heapsort', descending=True)
+        return np.sort(np.diag(A))[::-1]
     else:
         raise NotImplementedError
 

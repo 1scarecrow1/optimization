@@ -1,9 +1,12 @@
 from collections.abc import Callable 
 from functools import partial
+import numpy as np
+
+eps = np.finfo(np.float32).eps
 
 def gradient(fun, x, grad=None, **fun_args):
     if grad is None or isinstance(grad, Callable):
-        g = gradient_func(fun, **fun_args)
+        g = gradient_func(fun, grad, **fun_args)
         return g(x)
     return grad
 
@@ -38,30 +41,100 @@ def hessian_func(fun, grad=None, hess=None, **kwargs):
         return partial(fun.hessian, **fun_kwargs)
     return compute_hessian_func(fun, grad, **fun_kwargs)
 
-def compute_gradient_func(func, *args, **kwargs):
+def compute_gradient_func(fun, **fun_args):
     '''
     TODO: Gradient and Hessian approximations 
     Ideally, gradient approximation method should be automatically chosen
     '''
-    raise NotImplementedError
+    return partial(finite_difference, fun, central=False, **fun_args)
 
-def compute_hessian_func(func, grad, *args, **kwargs):
-    # use gradient info if available
-    raise NotImplementedError
+def compute_hessian_func(fun, grad=None, **fun_args):
+    if grad is None:
+        grad = compute_gradient_func(fun, **fun_args)
+    return partial(finite_difference, grad, central=False, **fun_args)
+
+def finite_difference(fun, x, fx=None, central=False, eps=eps, **fun_args):
+    if fx is None:
+        fx = fun(x, **fun_args)
+    f = partial(fun, **fun_args)
+    x = np.array(x, dtype=float)
+    #eps = np.sqrt(eps) * (1+np.abs(x)) # increase eps and scale by x
+    if np.ndim(fx) == 0:
+        if central:
+            return gradient_central_finite_difference(f, x, eps=eps)
+        return gradient_forward_finite_difference(f, x, fx=fx, eps=eps)
+    else:
+        if central:
+            return jacobian_central_finite_difference(f, x, eps=eps) 
+        return jacobian_forward_finite_difference(f, x, fx=fx, eps=eps)
 
 
-def finite_difference(fun, central=False):
+def gradient_central_finite_difference(f, x, eps=eps):
+    # f: Rn -> R, x: Rn or R^nxm
+    n = np.size(x)
+    g = np.zeros_like(x)
+    xp = x.copy()
+    den = 2*eps
+    for i in range(n):
+        xi = xp.flat[i]
+        xp.flat[i] = xi + eps 
+        ff = f(xp)
+        xp.flat[i] = xi - eps 
+        fb = f(xp)
+        xp.flat[i] = xi 
+        g.flat[i] = (ff - fb)/den
+    if np.ndim(x) == 0:
+        return g[0]
+    return g
 
-    if central:
-        return central_finite_difference(fun)
+def gradient_forward_finite_difference(f, x, fx=None, eps=eps):
+    # f: Rn -> R, x: Rn or R^nxm
+    if fx is None:
+        fx = f(x)
+    n = np.size(x)
+    g = np.zeros_like(x)
+    for i in range(n):
+        x_p = np.zeros_like(x)
+        x_p.flat[i] += eps 
+        g.flat[i] = f(x+x_p)
+    g -= fx 
+    g /= eps
+    if np.ndim(x) == 0:
+        return g[0]
+    return g
 
-    return forward_finite_difference(fun)
+def jacobian_forward_finite_difference(f, x, fx=None, eps=eps):
+    # f: Rn -> Rm, x: Rn
+    if fx is None:
+        fx = f(x)
+    m, n = np.size(fx), np.size(x)
+    J = np.zeros((m, n))
+    xp = x.copy()
+    for i in range(n):
+        xi = xp.flat[i]
+        xp.flat[i] = xi + eps
+        fp = f(xp)
+        J[:, i] = (fp - fx) / eps
 
-def central_finite_difference(fun):
-    pass 
+    return J
 
-def forward_finite_difference(fun):
-    pass
+def jacobian_central_finite_difference(f, x, fx=None, eps=eps):
+    # f: Rn -> Rm, x: Rn
+    if fx is None:
+        fx = f(x)
+    m, n = np.size(fx), np.size(x)
+    den = 2*eps
+    J = np.zeros((m, n))
+    xp = x.copy()
+    for i in range(n):
+        xi = xp.flat[i]
+        xp.flat[i] = xi + eps 
+        ff = f(xp)
+        xp.flat[i] = xi - eps 
+        fb = f(xp)
+        xp.flat[i] = xi 
+        J[:, i] = (ff - fb) / den
+    return J
 
 def automatic_differentiation(fun):
     pass
