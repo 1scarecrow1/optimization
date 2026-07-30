@@ -11,10 +11,12 @@ def gradient(fun, x, grad=None, **fun_args):
     return grad
 
 def hessian(fun, x, hess=None, grad=None, **fun_args):
-    if hess is None or isinstance(hess, Callable):
-        h = hessian_func(fun, grad, hess, **fun_args)
-        return h(x)
-    return hess
+    if hess is not None and not isinstance(hess, Callable):
+        return hess 
+    if not isinstance(grad, Callable):
+        grad = None 
+    h = hessian_func(fun, grad, hess, **fun_args)
+    return h(x)
 
 def gradient_func(fun, grad=None, **kwargs):
     if grad is not None:
@@ -39,6 +41,8 @@ def hessian_func(fun, grad=None, hess=None, **kwargs):
         fun_kwargs = kwargs
     if hasattr(fun, 'hessian'):
         return partial(fun.hessian, **fun_kwargs)
+    if hasattr(grad, 'gradient'):
+        return partial(grad.gradient, **fun_kwargs)
     return compute_hessian_func(fun, grad, **fun_kwargs)
 
 def compute_gradient_func(fun, **fun_args):

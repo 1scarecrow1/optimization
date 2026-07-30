@@ -7,6 +7,9 @@ import warnings
 logger = logging.getLogger(__name__)
 
 def resolve_func(f, methods: dict = None, name='', default=None):
+    '''
+    default must be a callable
+    '''
     if f is None and default is not None:
         return default
     if isinstance(f, str):
@@ -21,11 +24,11 @@ def resolve_func(f, methods: dict = None, name='', default=None):
         raise NotImplementedError(
             f"{name} method {f!r} is either not implemented, not valid, or not in {methods}. "
             f"Pass a function yourself or choose one of: {valid}"
-        ) from None
+        )
 
     elif isinstance(f, Callable):                    
         func = f.func if isinstance(f, partial) else f
-        if func in methods.values() or not methods or default is None:
+        if not methods or func in methods.values() or default is None:
             return f                                 
     
     if default is not None:

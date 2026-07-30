@@ -7,16 +7,7 @@ from presto.gradients import gradient_func, hessian_func
 from presto.utils import timer, resolve_func, merge_args
 from dataclasses import dataclass
 from collections.abc import Callable 
-
-@dataclass
-class MinimizeResult:
-    x: np.ndarray
-    f_min: float | np.ndarray
-    iterations: list[dict]
-    func: Callable
-    solver: Callable | str
-    line_search_method: Callable | str
-
+from presto.minimize_res import MinimizeResult
 
 @timer
 def minimize(func, x, solver, line_search_method, 
@@ -37,7 +28,7 @@ def minimize(func, x, solver, line_search_method,
     f = partial(func, **func_args)
     g = partial(gradient, **func_args) if not isinstance(gradient, partial) else gradient 
     p = partial(resolve_direction_method(solver), func, **merge_args(func_args, solver_args))
-    line_search = partial(resolve_line_search_method(line_search_method), f, grad=g, **merge_args(func_args, line_search_args))
+    line_search = partial(resolve_func(line_search_method, LINE_SEARCH_METHODS, "line search"), f, grad=g, **merge_args(func_args, line_search_args))
     direction = p.func 
 
     alpha = a0
@@ -55,13 +46,14 @@ def minimize(func, x, solver, line_search_method,
     
     p_cur = p(x_cur, g_cur)
     converged = partial(check_convergence, conv_tol=conv_tol) 
-
+    converged_flag = False
     iterations = []
     for i in range(max_iter):
         iterations.append({'iter': i, 'step': alpha*p_cur.p, 'alpha': alpha, 'x': x_cur, 
                            'func': f_cur, 'grad': g_cur})
         if converged(g_cur):
-            print(f'{direction.__name__} with {line_search.__name__} converged in {i} iterations')
+            print(f'{direction.__name__} with {line_search.func.__name__} converged in {i} iterations')
+            converged_flag=True
             break 
         # variables needed should be fed into a state and unpacked by respective line search method
         alpha, x_next, f_next = line_search(x_cur, f_cur, g_cur, p_cur.p, a0=a0) 
@@ -87,10 +79,11 @@ def minimize(func, x, solver, line_search_method,
         iterations=iterations,
         func=func,
         solver=solver,
-        line_search_method=line_search_method,
+        method=line_search_method,
+        converged=converged_flag
     )
 
-def check_convergence(grad, conv_tol=1e-4):
+def check_convergence(grad, conv_tol=1e-5):
     """
     TODO: Use test_terminal_steepest_descent 
     """      
@@ -115,8 +108,7 @@ def test_terminal_steepest_descent(p, grad):
     return res
 
     
-def resolve_line_search_method(f, methods=LINE_SEARCH_METHODS, name="line search"):
-    return resolve_func(f, methods, name)
+
     
 
 

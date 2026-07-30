@@ -6,21 +6,19 @@ from presto.gradients import gradient, hessian, gradient_func, hessian_func
 from presto.solvers.newton import newton_iteration
 from presto.utils import resolve_func, merge_args
 import presto.solvers.quasi_newton as qn
-import presto.solvers.newton as nu
-from presto.solvers.modified_newton import regularise, gauss_newton_approx
-
-#TODO: resolve grad/hess 
+import presto.solvers.newton as nw
+import presto.solvers.modified_newton as mn
 
 DescentDirectionOutput = namedtuple("DescentDirectionOutput", "p")
 QuasiNewtonOutput = namedtuple("QuasiNewtonOutput", "p B")
 
-def gradient_descent(func, x, grad=None, **kwargs):  
-    p = - gradient(func, x, grad, **kwargs)
+def gradient_descent(func, x, grad=None, **func_args):  
+    p = - gradient(func, x, grad, **func_args)
     return DescentDirectionOutput(p) 
 
-def newton(func, x, grad=None, hess=None, **kwargs):
-    gx = gradient(func, x, grad, **kwargs)
-    hx = hessian(func, x, hess, grad, **kwargs)   
+def newton(func, x, grad=None, hess=None, **func_args):
+    gx = gradient(func, x, grad, **func_args)
+    hx = hessian(func, x, hess, grad, **func_args)   
     p = newton_iteration(gx, hx)
     return DescentDirectionOutput(p)
 
@@ -32,7 +30,7 @@ def quasi_newton(hessian_approx_method, func, x, grad,
     if x_next is not None and g_next is None:
         g_next = gradient(func, x_next, grad, **func_args)
     quasi_newton_args = quasi_newton_args or {}
-    quasi_newton_method = resolve_hessian_approx_method(hessian_approx_method) 
+    quasi_newton_method = resolve_func(hessian_approx_method, qn.QUASI_NEWTON_HESSIAN_UPDATES, 'quasi newton hessian update')  
     B_next = quasi_newton_method(x, g_cur, x_next, g_next, B_cur, inv, **quasi_newton_args)
     if g_next is None:
         g_next = g_cur
@@ -53,21 +51,23 @@ def broyden(func, x, grad, x_next=None, g_next=None, B_cur=None, inv=True, quasi
 
 def modified_newton(func, x, grad=None, hess=None, mod_method=None, mod_args=None, **func_args):
     gx = gradient(func, x, grad, **func_args)
-    print(f'gx: {gx}')
     mod_args = mod_args or {}
-    mod_method = mod_method or regularised_cholesky
-    if mod_method == gauss_newton_approx:
+    mod_newton = resolve_func(mod_method, mn.NEWTON_MODIFICATION_METHODS, 'newton modification methods', regularised_cholesky)
+    if mod_newton == mn.gauss_newton_approx:
         try:
-            hx = gauss_newton_approx(gx)
+            hx = mn.gauss_newton_approx(gx)
             p = np.linalg.solve(hx, -gx)
             return DescentDirectionOutput(p)
         except ValueError:
             warnings.warn('Jacobian has insufficient dimension for Gauss Newton - switching to regularised Cholesky')
-            mod_method = regularised_cholesky
+            mod_newton = regularised_cholesky
             pass
-
     hx = hessian(func, x, hess, grad, **func_args)   
-    L = mod_method(hx, **mod_args) 
+    L = mod_newton(hx, **mod_args) 
+    if isinstance(L, SuperLU):
+        p = L.solve(-gx)
+        return DescentDirectionOutput(p)
+
     y = scipy.linalg.solve_triangular(L, -gx, lower=True)
     p = scipy.linalg.solve_triangular(L.T, y, lower=False)
     return DescentDirectionOutput(p)
@@ -88,33 +88,19 @@ NEWTON = [newton, modified_newton]
 QUASI_NEWTON = [quasi_newton, bfgs, symmetric_rank_one, broyden]
 #CONJUGATE_GRADIENT = [conjugate_gradient]
 
-NEWTON_HESSIAN_UPDATES = [nu.newton]
-MODIFIED_NEWTON_HESSIAN_UPDATES = [regularised_cholesky, inexact_modified_cholesky, gauss_newton_approx]
-QUASI_NEWTON_HESSIAN_UPDATES = [qn.broyden, qn.bfgs, qn.symmetric_rank_one]
-
-NEWTON_METHODS = {
+NEWTON_SOLVERS = {
     'newton': newton,
     'modified_newton': modified_newton,
 }
 
-QUASI_NEWTON_METHODS = {
+QUASI_NEWTON_SOLVERS = {
     'bfgs': bfgs,
     'sr1': symmetric_rank_one,
     'broyden': broyden
 }
 
-NEWTON_MODIFICATION_METHODS = {
-    'regularised_cholesky': regularised_cholesky,
-    'inexact_modified cholesky': inexact_modified_cholesky,
-    'incomplete_cholesky': incomplete_cholesky,
-    'incomplete_LU': incomplete_LU,
-    'gauss_newton': gauss_newton_approx
-}
 
-DIRECTIONS = {**NEWTON_METHODS, **QUASI_NEWTON_METHODS, 'gradient descent': gradient_descent}
+DIRECTIONS = {**NEWTON_SOLVERS, **QUASI_NEWTON_SOLVERS, 'gradient descent': gradient_descent}
 
 def resolve_direction_method(f, methods=DIRECTIONS, name='direction'):
     return resolve_func(f, methods, name)
-
-def resolve_hessian_approx_method(f, methods=QUASI_NEWTON_METHODS, name='hessian approx', default=symmetric_rank_one):
-    return resolve_func(f, methods, name, default=default)

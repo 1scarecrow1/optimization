@@ -82,3 +82,6 @@ def stopping_criteria(fx, term=0.0, rtol=1e-5, atol=1e-7):
     return np.isclose(value, term, rtol=rtol, atol=atol)
 
 
+NEWTON_HESSIAN_UPDATES = {
+    'newton': newton
+}

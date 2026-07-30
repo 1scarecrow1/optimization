@@ -91,7 +91,7 @@ def run_linear_cg():
                 print(f"eigvals: {np.linalg.eigvalsh(precond)}")
                 print(f'condition no. {condition_number(precond)}')
         else:
-            print("incomplete Cholesky broke down (A not numerically PD) — "
+            print("incomplete Cholesky broke down (A not numerically PD)- "
                 "skipping preconditioned spectrum")
 
         iterations = res.iterations
@@ -109,12 +109,15 @@ def run_nonlinear_cg():
     #x0 = [1.2, 1.2]
     x0 = np.array([-1.2, 1.0])
 
-    optimizer_params = {'conv_tol': 1e-5, 'max_iter':200}
+    optimizer_params = {'conv_tol': 1e-6, 'max_iter':200}
 
     line_search_args = {'a0': 1.0}
     res = minimize(rosenbrock, x0, line_search_method=backtracking, conjugate_method=polak_ribiere, 
                    line_search_args=line_search_args, 
                    **optimizer_params)
+    grad = res.iterations[-1]['grad']
+    print(f'CG converged: {res.converged} to min f(x) {res.f_min} at {res.x} in {res.terminal} iterations')
+    print(f"min residual norm {l2_norm(grad)}")
     plot_nonlinear_cg_convergence(res)
 
 def run_newton_cg():

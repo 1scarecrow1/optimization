@@ -84,7 +84,7 @@ def incomplete_cholesky_shifted(A, alpha0=1e-8, grow=2.0):
         try:
             lu = spilu(A + alpha * identity(A.shape[0]), permc_spec='NATURAL', diag_pivot_thresh=0.0)
             if np.all(lu.U.diagonal() > 0):
-                return lu, alpha
+                return lu
         except RuntimeError:
             pass
         alpha = max(alpha * grow, alpha0 * scale)   

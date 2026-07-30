@@ -418,8 +418,7 @@ def solve_quadratic(a, b, c):
     disc = b*b - 4*a*c
     if disc < 0:
         raise ValueError(f"no real root: discriminant {disc}")
-    disc_sqrt = np.sqrt(disc)
-    q = -0.5 * (b + np.copysign(np.sqrt(disc_sqrt), b))
+    q = -0.5 * (b + np.copysign(np.sqrt(disc), b))
     r1, r2 = q / a, c / q
     return max(r1, r2), min(r1, r2)
 

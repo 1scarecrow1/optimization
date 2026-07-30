@@ -82,3 +82,10 @@ def symmetric_rank_one(x_cur, g_cur, x_next=None, g_next=None, B_cur=None, inv=F
     return B_next
 
 
+QUASI_NEWTON_HESSIAN_UPDATES = {
+    'bfgs': bfgs,
+    'sr1': symmetric_rank_one,
+    'symmetric rank 1': symmetric_rank_one,
+    'symmetric rank one': symmetric_rank_one,
+    'broyden': broyden
+}

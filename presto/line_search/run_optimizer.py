@@ -30,7 +30,7 @@ def summarise_search(result, display_all=False, save_results=False):
     f_min = result.f_min
     x_min = result.x
     iterations = result.iterations
-    line_search_method = result.line_search_method if isinstance(result.line_search_method, str) else result.line_search_method.__name__
+    line_search_method = result.method if isinstance(result.method, str) else result.method.__name__
     direction = result.solver if isinstance(result.solver, str) else result.solver.__name__
 
     print(f"Minimising {func_name} with {direction} - {line_search_method}")
@@ -56,7 +56,7 @@ def plot_results(result, func_name=None, save_results=False):
     func_name = result.func.__name__ if func_name is None else func_name
 
     iterations = result.iterations
-    line_search_method = result.line_search_method if isinstance(result.line_search_method, str) else result.line_search_method.__name__
+    line_search_method = result.method if isinstance(result.method, str) else result.method.__name__
     direction = result.solver if isinstance(result.solver, str) else result.solver.__name__
     x_vals = np.array([it["x"] for it in iterations])
     func_vals = np.array([it["func"] for it in iterations])
@@ -83,14 +83,14 @@ def main():
     """
     TODO: create function for easy comparison of any 2+ methods - direction and step length
     """
-    #x0 = np.array([-1.2, 1.0])
-    x0 = np.array([1.2, 1.2])
+    x0 = np.array([-1.2, 1.0])
+    #x0 = np.array([1.2, 1.2])
 
     objective_func = rosenbrock 
     #func_summary = summarise_function(objective_func, x0)
     #print(func_summary)   
     
-    objective_func = lambda x: np.sum(10*x**2 - np.sin(x))
+    #objective_func = lambda x: np.sum(10*x**2 - np.sin(x))
     #objective_func = lambda x: l2_norm(np.sin(x))
 
     # n = 4
@@ -134,9 +134,9 @@ def main():
         'line_search_args': line_search_methods['backtracking']
     }
     modified_newton_params = {
-        'solver': 'modified_newton', 'line_search_method': 'backtracking', 
-        'solver_args': {'mod_method': gauss_newton_approx},
-        'line_search_args': line_search_methods['backtracking']
+        'solver': 'modified_newton', 'line_search_method': 'wolfe', 
+        'solver_args': {'mod_method': incomplete_cholesky_shifted},
+        'line_search_args': line_search_methods['wolfe']
     }
     optimizer_params = {'conv_tol': 1e-5, 'max_iter':200}
     save_results=False
@@ -153,26 +153,26 @@ def main():
     # summarise_search(res_n, display_all=False) 
     # plot_results(res_n, save_results=save_results)
 
-    # res_bb = minimize(objective_func, x0, 'bfgs', 'backtracking', 
+    # res_bb = minimize(objective_func, x0, 'bfgs', 'wolfe', 
     #          solver_args=quasi_newton_args,
-    #          line_search_args = line_search_methods['backtracking'],
+    #          line_search_args = line_search_methods['wolfe'],
     #          prev_alpha=False, 
     #          **optimizer_params)
     # summarise_search(res_bb, display_all=False) 
     # plot_results(res_bb, save_results=save_results)
 
-    res_bw = minimize(objective_func, x0, symmetric_rank_one, 'wolfe', 
-             solver_args=quasi_newton_args,
-             line_search_args = line_search_methods['wolfe'],
-             prev_alpha=False, 
-             **optimizer_params)
-    summarise_search(res_bw, display_all=False) 
-    plot_results(res_bw, save_results=save_results)
+    # res_bw = minimize(objective_func, x0, symmetric_rank_one, 'wolfe', 
+    #          solver_args=quasi_newton_args,
+    #          line_search_args = line_search_methods['wolfe'],
+    #          prev_alpha=False, 
+    #          **optimizer_params)
+    # summarise_search(res_bw, display_all=False) 
+    # plot_results(res_bw, save_results=save_results)
 
-    # res_mn = minimize(objective_func, x0, **modified_newton_params,                 
-    #                 **optimizer_params)    
-    # summarise_search(res_mn, display_all=False) 
-    # plot_results(res_mn, save_results=save_results)
+    res_mn = minimize(objective_func, x0, **modified_newton_params,                 
+                    **optimizer_params)    
+    summarise_search(res_mn, display_all=False) 
+    plot_results(res_mn, save_results=save_results)
 
                 
     plt.show(block=True)

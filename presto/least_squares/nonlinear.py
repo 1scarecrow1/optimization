@@ -5,11 +5,10 @@ import warnings
 import numpy as np
 from presto.gradients import gradient_func
 from presto.linalg import l2_norm
-from presto.least_squares.linear import LINEAR_LSTSQ_METHODS, qr_solve, resolve_linear_lstsq_method, NON_ITERATIVE_SOLVERS
+from presto.least_squares.linear import LINEAR_LSTSQ_METHODS, qr_solve, NON_ITERATIVE_SOLVERS
 from presto.least_squares.loss_functions import LOSS_FUNCTIONS, quadratic_loss
 from presto.line_search.line_search import backtracking, wolfe
-from presto.solvers.modified_newton import gauss_newton_approx
-from presto.trust_region.trust_region import general, quadratic_model, gauss_newton_model, qr_trust_region_subproblem
+from presto.trust_region.trust_region import general, gauss_newton_model, qr_trust_region_subproblem
 from presto.utils import resolve_func
 ###### Function supplied should be residual function 
 ###### Create loss function to minimize based on supplied function and specified loss function
@@ -23,8 +22,8 @@ class MinimizeResult:
     search_method: Callable | str
 
 def gauss_newton(func, x0, jac=None, loss_function='sq',
-                 subproblem_method=None, subproblem_args=None, 
-                 line_search_method=None, line_search_args=None,
+                 subproblem_method=qr_solve, subproblem_args=None, 
+                 line_search_method=wolfe, line_search_args=None,
                  loss_function_args = None,
                  max_iter=200, **func_args):
 
@@ -48,7 +47,6 @@ def gauss_newton(func, x0, jac=None, loss_function='sq',
     line_search_args = line_search_args or {}
     line_search_args['a0'] = 1.0 # overwrite any starting alpha values with 1
     alpha = line_search_args['a0']
-    line_search_method = line_search_method or backtracking
     line_search = partial(line_search_method, r, **line_search_args)
 
     iterations = []

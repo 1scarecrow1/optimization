@@ -18,15 +18,16 @@ def absolute_loss(func, x, fx=None, c=1.0, t=0.0):
         return c*abs(tf) 
     return c*np.linalg.norm(tf, 1)
 
-def huber_loss(func, x, delta, w=0.5):
+def huber_loss(func, x, fx=None, delta=0.1, w=0.5):
     '''
     L(y, f(x)) = 0.5 * (y - f(x))**2 if |y - f(x)| <= delta 
                 else delta *(|y - f(x)| - 0.5*delta)
     Here func is assumed to be the residual function y - f(x)
     '''
-    fx = func(x)
+    if fx is None:
+        fx = func(x)
     abs_fx = np.abs(fx)
-    np.where(abs_fx <= delta, 
+    return np.where(abs_fx <= delta, 
              quadratic_loss(func, x, fx, c=w),
              delta*(absolute_loss(func, x, fx, c=1.0) - (1-w)*delta))
 
@@ -41,6 +42,9 @@ LOSS_FUNCTIONS = {
     'absolute': absolute_loss,
     'abs': absolute_loss,
     'huber': huber_loss,
+}
+
+CATEGORICAL_LOSS_FUNCTIONS = {
     'zero one': zero_one_loss,
     '0-1': zero_one_loss
 }

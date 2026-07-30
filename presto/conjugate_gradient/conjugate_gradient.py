@@ -109,10 +109,9 @@ def fletcher_reeves(g_cur, g_next, p_cur=None):
 
 def polak_ribiere(g_cur, g_next, p_cur=None, pos_only=False):
     beta = g_next @ (g_next - g_cur) / (g_cur @ g_cur)
-
     if pos_only:
         return max(beta, 0)
-    return beta  
+    return beta
 
 def hestenes_stiefel(g_cur, g_next, p_cur):
     a = g_next - g_cur
@@ -129,10 +128,31 @@ def hager_zhang(g_cur, g_next, p_cur):
     c = a - 2*p_cur * (a @ a) / b
     return c @ g_next / b
 
+def pos_beta(beta):
+    return max(0, beta)
+
 def converged(x, conv_tol=1e-4):
     return l2_norm(x) < conv_tol
 
 CG_METHODS = {
     'cg': linear_cg,
+    'preconditioned cg': linear_preconditioned_cg
+}
 
+NONLINEAR_CG_BETAS = {
+    'fletcher reeves': fletcher_reeves,
+    'fletcher_reeves': fletcher_reeves,
+    'FR': fletcher_reeves,
+    'polak_ribiere': polak_ribiere,
+    'polak ribiere': polak_ribiere,
+    'PR': polak_ribiere,
+    'hestenes_stiefel': hestenes_stiefel,
+    'hestenes stiefel': hestenes_stiefel,
+    'HS': hestenes_stiefel,
+    'dai_yuan': dai_yuan,
+    'dai yuan': dai_yuan,
+    'DY': dai_yuan,
+    'hager_zhang': hager_zhang,
+    'hager zhang': hager_zhang,
+    'HZ': hager_zhang
 }
