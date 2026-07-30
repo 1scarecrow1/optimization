@@ -105,16 +105,25 @@ def plot_contour(func, x_vals, direction=None, method=None, func_name=None, n=2,
 
     fig, ax = plt.subplots(figsize=(8, 6))
 
+    if Z.min() + 1e-8 > 0:
+        l, h = np.log10(Z.min() + 1e-8), np.log10(Z.max())
+        levels_f=np.logspace(l, h, 80)
+        levels=np.logspace(l, h, 40)
+    else:
+        l, h = Z.min() + 1e-8, Z.max()
+        levels_f=np.linspace(l, h, 80)
+        levels=np.linspace(l, h, 40)
+
     cf = ax.contourf(
         X1, X2, Z,
-        levels=np.logspace(np.log10(Z.min() + 1e-8), np.log10(Z.max()), 80),
+        levels=levels_f,
         norm=LogNorm(),
         cmap="viridis",
     )
 
     ax.contour(
         X1, X2, Z,
-        levels=np.logspace(np.log10(Z.min() + 1e-8), np.log10(Z.max()), 40),
+        levels=levels,
         colors="black",
         alpha=0.3,
         linewidths=0.6,

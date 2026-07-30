@@ -51,7 +51,7 @@ def compute_gradient_func(fun, **fun_args):
 def compute_hessian_func(fun, grad=None, **fun_args):
     if grad is None:
         grad = compute_gradient_func(fun, **fun_args)
-    return partial(finite_difference, grad, central=False, **fun_args)
+    return partial(finite_difference, fun=grad, central=False, **fun_args)
 
 def finite_difference(fun, x, fx=None, central=False, eps=eps, **fun_args):
     if fx is None:
@@ -65,7 +65,7 @@ def finite_difference(fun, x, fx=None, central=False, eps=eps, **fun_args):
         return gradient_forward_finite_difference(f, x, fx=fx, eps=eps)
     else:
         if central:
-            return jacobian_central_finite_difference(f, x, eps=eps) 
+            return jacobian_central_finite_difference(f, x, fx=fx, eps=eps) 
         return jacobian_forward_finite_difference(f, x, fx=fx, eps=eps)
 
 
@@ -81,11 +81,11 @@ def gradient_central_finite_difference(f, x, eps=eps):
         ff = f(xp)
         xp.flat[i] = xi - eps 
         fb = f(xp)
+        g.flat[i] = ff - fb
         xp.flat[i] = xi 
-        g.flat[i] = (ff - fb)/den
     if np.ndim(x) == 0:
-        return g[0]
-    return g
+        return g[0]/den
+    return g/den
 
 def gradient_forward_finite_difference(f, x, fx=None, eps=eps):
     # f: Rn -> R, x: Rn or R^nxm
@@ -93,15 +93,15 @@ def gradient_forward_finite_difference(f, x, fx=None, eps=eps):
         fx = f(x)
     n = np.size(x)
     g = np.zeros_like(x)
+    xp = x.copy()
     for i in range(n):
-        x_p = np.zeros_like(x)
-        x_p.flat[i] += eps 
-        g.flat[i] = f(x+x_p)
-    g -= fx 
-    g /= eps
+        xi = xp.flat[i]
+        xp.flat[i] = xi + eps 
+        g.flat[i] = f(xp) - fx
+        xp.flat[i] = xi 
     if np.ndim(x) == 0:
-        return g[0]
-    return g
+        return g[0]/eps
+    return g/eps
 
 def jacobian_forward_finite_difference(f, x, fx=None, eps=eps):
     # f: Rn -> Rm, x: Rn
@@ -113,10 +113,9 @@ def jacobian_forward_finite_difference(f, x, fx=None, eps=eps):
     for i in range(n):
         xi = xp.flat[i]
         xp.flat[i] = xi + eps
-        fp = f(xp)
-        J[:, i] = (fp - fx) / eps
-
-    return J
+        J[:, i] = f(xp) - fx
+        xp.flat[i] = xi 
+    return J/eps
 
 def jacobian_central_finite_difference(f, x, fx=None, eps=eps):
     # f: Rn -> Rm, x: Rn
@@ -132,9 +131,10 @@ def jacobian_central_finite_difference(f, x, fx=None, eps=eps):
         ff = f(xp)
         xp.flat[i] = xi - eps 
         fb = f(xp)
+        J[:, i] = ff - fb
         xp.flat[i] = xi 
-        J[:, i] = (ff - fb) / den
-    return J
+
+    return J/den
 
 def automatic_differentiation(fun):
     pass

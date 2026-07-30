@@ -263,20 +263,19 @@ def svd(x):
 
 
 def solve(A, b):
-    try:
-        x = solve_cholesky(A, b)
-    except np.linalg.LinAlgError:
-        if not is_square(A):
-            b = A.T @ b
-            A = A.T @ A 
-        if not 0 in np.diag(A):
-            P, L, U = LUdecomposition_with_pivoting(A)
-            b = P @ b
-        else:
-            raise NotImplementedError
+    if not is_square(A) or not is_PSD(A):
+        b = A.T @ b
+        A = A.T @ A 
+    if not 0 in np.diag(A):
+        P, L, U = LUdecomposition_with_pivoting(A)
+        b = P @ b
 
-        y = forward_substitution(L, b)
-        x = backward_substitution(U, y)
+    try:
+        solve_cholesky(A, b)
+    except np.linalg.LinAlgError:
+        pass
+    y = forward_substitution(L, b)
+    x = backward_substitution(U, y)
 
     return x
 

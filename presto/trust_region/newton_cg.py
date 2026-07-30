@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 from presto.linalg import l2_norm
 from presto.trust_region.trust_region import solve_quadratic
@@ -46,4 +48,7 @@ def cg_steihaug(g_cur, B_cur, rad_cur, tol_cur=None, max_iter=100):
         rr = rr_next
 
     print(f'failed to converge after {max_iter} iterations')
+    warnings.warn(
+        f"CG Steihaug failed to converge after {max_iter} iterations"
+        f"returning the last direction", RuntimeWarning)
     return z_cur  

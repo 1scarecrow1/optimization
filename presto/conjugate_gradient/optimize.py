@@ -1,4 +1,5 @@
-from functools import partial 
+from functools import partial
+import warnings 
 import numpy as np 
 from presto.linalg import * 
 from presto.conjugate_gradient.conjugate_gradient import *
@@ -21,7 +22,7 @@ class MinimizeResult:
 
 @timer 
 def cg_solve(A, b, x, preconditioning=True, preconditioner=None, conv_tol=1e-5, max_iter=100):
-    x = np.asarray(x, dtype=float)
+    x = np.array(x, dtype=float)
     A = csc_array(A, dtype=float)
     b = np.array(b, dtype=float)
 
@@ -34,35 +35,35 @@ def cg_solve(A, b, x, preconditioning=True, preconditioner=None, conv_tol=1e-5, 
     rr = r_cur @ r_cur
     f = lambda x: 0.5 * x @ A @ x - b @ x
     f_cur = f(x_cur)
+    alpha = 0.0 
 
-    num_iters = 0
-    iterations = [{'iter': num_iters, 'direction': p_cur, 'x': x_cur, 
-                           'func': f_cur, 'grad': r_cur}]
-    
-    while not (converged(r_cur, conv_tol) or num_iters >= max_iter):
+    iterations = []
+    for i in range(max_iter):
+        iterations.append({'iter': i, 'step': alpha*p_cur, 'alpha': alpha, 'x': x_cur, 
+                           'func': f_cur, 'grad': r_cur})
+        if converged(r_cur, conv_tol):
+            break
         c = A @ p_cur 
         d = p_cur @ c
-        if d <= 0:                      
-            print("CG breakdown: pᵀAp ≤ 0 (A is numerically indefinite)")
-            break                        
-        alpha = rr / d
+        if d <= 0:      
+            warnings.warn(f'CG breakdown: pᵀAp ≤ 0. A is numerically indefinite - terminating search after {i} iterations')
+            break      
+        alpha = rr / d                     
         x_next = x_cur + alpha * p_cur
         r_next = r_cur + alpha * c  
         rr_next = r_next @ r_next 
         beta = rr_next / rr 
         p_cur = -r_next + beta * p_cur 
-        r_cur = r_next
-        rr = rr_next
+        r_cur, rr = r_next, rr_next
         x_cur = x_next
         f_cur = f_cur + alpha * (r_cur @ p_cur) + 0.5 * alpha**2 * d
-
-        num_iters += 1
-        iterations.append({'iter': num_iters, 'direction': p_cur, 'x': x_cur, 
+    else:
+        iterations.append({'iter': max_iter, 'step': alpha*p_cur, 'alpha': alpha, 'x': x_cur, 
                            'func': f_cur, 'grad': r_cur})
 
     return MinimizeResult(
         x=x_cur,
-        f_min=f_cur,
+        f_min=r_cur,
         iterations=iterations,
         func=None,
         preconditioner=None,
@@ -72,8 +73,8 @@ def cg_solve(A, b, x, preconditioning=True, preconditioner=None, conv_tol=1e-5, 
 
 
 def cg_solve_preconditioner(A, b, x, preconditioner=None, conv_tol=1e-5, max_iter=100):
-    x = np.asarray(x, dtype=float)
-    A = np.array(A, dtype=float)
+    x = np.array(x, dtype=float)
+    A = csc_array(A, dtype=float)
     b = np.array(b, dtype=float)
 
     x_cur = x
@@ -97,37 +98,36 @@ def cg_solve_preconditioner(A, b, x, preconditioner=None, conv_tol=1e-5, max_ite
     ry = r_cur @ y_cur
     f = lambda x: 0.5 * x @ A @ x - b @ x
     f_cur = f(x_cur)
+    alpha = 0.0 
 
-    num_iters = 0
-    iterations = [{'iter': num_iters, 'direction': p_cur, 'x': x_cur, 
-                           'func': f_cur, 'grad': r_cur}]
-    
-    while not (converged(r_cur, conv_tol) or num_iters >= max_iter):
+    iterations = []
+    for i in range(max_iter):
+        iterations.append({'iter': i, 'step': alpha*p_cur, 'alpha': alpha, 'x': x_cur, 
+                           'func': f_cur, 'grad': r_cur})
+        if converged(r_cur, conv_tol):
+            break
         c = A @ p_cur 
         d = p_cur @ c
-        if d <= 0:                      
-            print("CG breakdown: pᵀAp ≤ 0 (A is numerically indefinite)")
-            break    
-        alpha = ry / d
+        if d <= 0:      
+            warnings.warn(f'CG breakdown: pᵀAp ≤ 0. A is numerically indefinite - terminating search after {i} iterations')
+            break 
+        alpha = ry / d      
         x_next = x_cur + alpha * p_cur
         r_next = r_cur + alpha * c 
         y_next = y(r_next)
         ry_next = r_next @ y_next
         beta = ry_next / ry
         p_cur = -y_next + beta * p_cur 
-        r_cur = r_next
-        y_cur = y_next
-        ry = ry_next 
+        r_cur, y_cur, ry = r_next, y_next, ry_next
         x_cur = x_next
         f_cur = f_cur + alpha * (r_cur @ p_cur) + 0.5 * alpha**2 * d
-
-        num_iters += 1
-        iterations.append({'iter': num_iters, 'direction': p_cur, 'x': x_cur, 
+    else:
+        iterations.append({'iter': max_iter, 'step': alpha*p_cur, 'alpha': alpha, 'x': x_cur, 
                            'func': f_cur, 'grad': r_cur})
 
     return MinimizeResult(
         x=x_cur,
-        f_min=f_cur,
+        f_min=r_cur,
         iterations=iterations,
         func=None,
         preconditioner=G,
@@ -160,20 +160,23 @@ def minimize(func, x,
     f_cur = f(x_cur)
     g_cur = g(x_cur)
     p_cur = - g_cur
-    num_iters = 0
-    iterations = [{'iter': num_iters, 'direction': p_cur, 'x': x_cur, 
-                           'func': f_cur, 'grad': g_cur}]
-    
-    while not (converged(g_cur, conv_tol) or num_iters >= max_iter):
-        _, x_next, f_cur = line_search(x_cur=x_cur, f_cur=f_cur, g_cur=g_cur, p_cur=p_cur)
+    alpha = 0.0
+    iterations = []
+    for i in range(max_iter):
+        iterations.append({'iter': i, 'step': alpha*p_cur, 'alpha': alpha, 'x': x_cur, 
+                           'func': f_cur, 'grad': g_cur})
+        if converged(g_cur, conv_tol):
+            break 
+        alpha, x_next, f_cur = line_search(x_cur=x_cur, f_cur=f_cur, g_cur=g_cur, p_cur=p_cur)
         g_next = g(x_next)
         beta = conjugate_method(g_cur, g_next, p_cur)
+        beta = max(0, beta)
         g_cur = g_next
         p_cur = - g_cur + beta * p_cur 
         x_cur = x_next
 
-        num_iters += 1
-        iterations.append({'iter': num_iters, 'direction': p_cur, 'x': x_cur, 
+    else:
+        iterations.append({'iter': max_iter, 'step': alpha*p_cur, 'alpha': alpha, 'x': x_cur, 
                            'func': f_cur, 'grad': g_cur})
 
     return MinimizeResult(

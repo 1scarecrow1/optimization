@@ -1,4 +1,5 @@
-from functools import partial 
+from functools import partial
+import warnings 
 import numpy as np 
 from presto.linalg import * 
 from presto.trust_region.trust_region import quadratic_model, general, trust_region_subproblem, dogleg, check_convergence, TRUST_REGION_METHODS
@@ -12,7 +13,7 @@ from collections.abc import Callable
 @dataclass
 class MinimizeResult:
     x: np.ndarray
-    f_min: float
+    f_min: float | np.ndarray
     iterations: list[dict]
     func: Callable
     solver: Callable | str
@@ -31,6 +32,8 @@ def minimize(func, x, solver, trust_region_method=dogleg,
     func_args = func_args or {}
     solver_args = solver_args or {}
     trust_region_args = trust_region_args or {}
+    trust_region_method = resolve_trust_region_method(trust_region_method)
+    
     method_args = {k: v for k, v in trust_region_args.items() if k not in ('rad0', 'D')}
     D = trust_region_args.get('D', None)
     hessian_approx_args = {k: v for k, v in solver_args.items() if k in ('inv', 'scale', 'den_tol')}
@@ -52,6 +55,7 @@ def minimize(func, x, solver, trust_region_method=dogleg,
     f_cur = f(x_cur) 
     g_cur = g(x_cur) 
     h_cur = h(x_cur, g_cur)
+    p_cur = np.zeros_like(x_cur) 
 
     if precondition:
         preconditioner = preconditioner if preconditioner is not None else inexact_modified_cholesky
@@ -60,31 +64,39 @@ def minimize(func, x, solver, trust_region_method=dogleg,
         L_inv = np.linalg.inv(L)
         h_cur = L_inv @ h_cur @ L_inv.T
 
-    model = partial(quadratic_model, D=D)
-    general_solve = partial(general, func, model, method=trust_region_method, 
+    general_solve = partial(general, func, method=trust_region_method, D_cur=D,
                             method_args=method_args, solver_args=solver_args)
 
-    num_iters = 0
-    iterations = [{'iter': num_iters, 'step': np.zeros_like(x_cur), 'size': rad_cur, 'x': x_cur, 
-                           'func': f_cur, 'grad': g_cur}]
+    iterations = []
     converged = partial(check_convergence, conv_tol=conv_tol)
-    while not (converged(g_cur) or num_iters >= max_iter or np.isclose(rad_cur, 0.0)): 
+
+    for i in range(max_iter):
+        iterations.append({'iter': i, 'step': p_cur, 'size': rad_cur, 'x': x_cur, 
+                           'func': f_cur, 'grad': g_cur})
+        if converged(g_cur):
+            print(f'{solver.__name__} with {trust_region_method.__name__} converged in {i} iterations')
+            break 
+        if np.isclose(rad_cur, 0.0):
+            warnings.warn(f'trust region radius close to 0: {rad_cur} - terminating search')
+            break 
         p_cur, x_next, f_cur, rad_cur = general_solve(x_cur, f_cur, g_cur, h_cur, rad_cur)
         if not np.allclose(p_cur, 0):
-            if precondition:
-                p_cur = np.linalg.solve(L.T, p_cur)
             g_next = g(x_next)
             if solver in NEWTON_HESSIAN_UPDATES:
                 h_cur = h(x_next, g_next)
             elif solver in QUASI_NEWTON_HESSIAN_UPDATES:
                 h_cur = h(x_cur, g_cur, x_next, g_next, h_cur)
+            if precondition:
+                L = preconditioner(h_cur)
+                p_cur = np.linalg.solve(L.T, p_cur)
+                g_next = np.linalg.solve(L, g_next)
+                L_inv = np.linalg.inv(L)
+                h_cur = L_inv @ h_cur @ L_inv.T
             g_cur = g_next 
-
         x_cur = x_next 
-        num_iters += 1
-        iterations.append({'iter': num_iters, 'step': p_cur, 'size': rad_cur, 'x': x_cur, 
+    else:
+        iterations.append({'iter': max_iter, 'step': p_cur, 'size': rad_cur, 'x': x_cur, 
                            'func': f_cur, 'grad': g_cur})
-
 
     return MinimizeResult(
         x=x_cur,

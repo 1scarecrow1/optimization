@@ -27,3 +27,7 @@ def modified_cholesky(A):
 
     return C
 
+def gauss_newton_approx(jac):
+    if np.ndim(jac) < 1:
+        raise ValueError(f'Jacobian must be atleast 2D')
+    return jac.T @ jac

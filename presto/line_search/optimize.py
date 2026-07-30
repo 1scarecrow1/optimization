@@ -11,7 +11,7 @@ from collections.abc import Callable
 @dataclass
 class MinimizeResult:
     x: np.ndarray
-    f_min: float
+    f_min: float | np.ndarray
     iterations: list[dict]
     func: Callable
     solver: Callable | str
@@ -31,36 +31,40 @@ def minimize(func, x, solver, line_search_method,
     solver_args = solver_args or {}
     line_search_args = line_search_args or {}
     a0 = line_search_args.get('a0', 1.0)
-
-    x = np.asarray(x, dtype=float)
-
-    direction = resolve_direction_method(solver)
-    line_search_func = resolve_line_search_method(line_search_method)
     gradient = gradient_func(func, grad, **func_args)    
 
+    x = np.asarray(x, dtype=float)
     f = partial(func, **func_args)
     g = partial(gradient, **func_args) if not isinstance(gradient, partial) else gradient 
-    p = partial(direction, func, **merge_args(func_args, solver_args))
-    line_search = partial(line_search_func, func, **merge_args(func_args, line_search_args))
+    p = partial(resolve_direction_method(solver), func, **merge_args(func_args, solver_args))
+    line_search = partial(resolve_line_search_method(line_search_method), f, grad=g, **merge_args(func_args, line_search_args))
+    direction = p.func 
 
-    # if direction in SECOND_ORDER_DIRECTIONS:
-    #     hessian = hessian_func(func, hess, **func_args)
-    #     h = partial(hessian, **func_args) if not isinstance(hessian, partial) else hessian
-    
     alpha = a0
     x_cur = x
     f_cur = f(x_cur) 
+    if np.ndim(f_cur) > 0:
+        raise ValueError(
+            "line_search.minimize expects a scalar objective. "
+            "For vector-valued functions, pass a scalar merit function such as "
+            "lambda x: 0.5 * l2_norm(r(x))**2, or use least_squares."
+        )    
     g_cur = g(x_cur) 
+    if np.ndim(g_cur) != 1:
+        raise ValueError("scalar minimization expects gradient shape (n,)")
+    
     p_cur = p(x_cur, g_cur)
-
-    num_iters = 0
-    iterations = [{'iter': num_iters, 'step': 0, 'x': x_cur, 
-                   'func': f_cur, 'grad': g_cur, 'search_direction': p_cur.p}]
     converged = partial(check_convergence, conv_tol=conv_tol) 
 
-    while not (converged(g_cur) or num_iters >= max_iter): 
+    iterations = []
+    for i in range(max_iter):
+        iterations.append({'iter': i, 'step': alpha*p_cur.p, 'alpha': alpha, 'x': x_cur, 
+                           'func': f_cur, 'grad': g_cur})
+        if converged(g_cur):
+            print(f'{direction.__name__} with {line_search.__name__} converged in {i} iterations')
+            break 
         # variables needed should be fed into a state and unpacked by respective line search method
-        alpha, x_next, f_next = line_search(x_cur, f_cur, g_cur, p_cur.p, a0=a0)
+        alpha, x_next, f_next = line_search(x_cur, f_cur, g_cur, p_cur.p, a0=a0) 
         g_next = g(x_next)
 
         if direction in QUASI_NEWTON:
@@ -70,14 +74,12 @@ def minimize(func, x, solver, line_search_method,
 
         x_cur = x_next 
         f_cur = f_next 
-        g_cur = g_next 
-
-        num_iters += 1
-        iterations.append({'iter': num_iters, 'step': alpha, 'x': x_cur, 
-                           'func': f_cur, 'grad': g_cur, 'search_direction': p_cur.p})
-        
+        g_cur = g_next        
         if prev_alpha:
             a0 = alpha
+    else:
+        iterations.append({'iter': i, 'step': alpha*p_cur.p, 'alpha': alpha, 'x': x_cur, 
+                           'func': f_cur, 'grad': g_cur, 'search_direction': p_cur.p})
 
     return MinimizeResult(
         x=x_cur,

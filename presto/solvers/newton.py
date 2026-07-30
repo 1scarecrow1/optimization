@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 from presto.gradients import gradient, hessian
 from presto.linalg import l2_norm, inverse
@@ -28,12 +30,14 @@ def roots(func, x, grad, max_iter=200, tol=1e-4, eps=machine_eps):
     x_next = x + step
 
     for _ in range(max_iter):
-        if func_stopping_criteria(g_cur, atol=eps):
+        if stopping_criteria(g_cur, atol=eps):
             raise ZeroDivisionError("gradient/jacobian/hessian is too close to 0")
-        if func_stopping_criteria(step, rtol=tol):
-            print(f"no further step improvement possible")
+        if stopping_criteria(step, rtol=tol):
+            warnings.warn(
+                f"no further step improvement possible - terminating search "
+                f"returning the last step", RuntimeWarning)
             return x 
-        if func_stopping_criteria(f_cur, atol=tol):
+        if stopping_criteria(f_cur, atol=tol):
             print("root found")
             return x
         
@@ -44,7 +48,9 @@ def roots(func, x, grad, max_iter=200, tol=1e-4, eps=machine_eps):
         x_next = x + step
         funcevals += 1
         gradevals += 1
-    print("no solution found")
+    warnings.warn(
+        f"no solution found in {max_iter} iterations "
+        f"returning the last step found", RuntimeWarning)
     return x  
 
 def newton(func, x, grad=None, hess=None, **kwargs):
@@ -68,7 +74,7 @@ def newton_iteration(fx, gx, inv=False):
     inv_gx = inverse(gx)
     return - inv_gx * fx
 
-def func_stopping_criteria(fx, term=0.0, rtol=1e-5, atol=1e-7):
+def stopping_criteria(fx, term=0.0, rtol=1e-5, atol=1e-7):
     if np.ndim(fx) == 0:
         value = fx
     else:

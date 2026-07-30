@@ -1,4 +1,5 @@
 from collections import namedtuple
+import warnings
 import numpy as np
 from presto.linalg import *
 from presto.gradients import gradient, hessian, gradient_func, hessian_func
@@ -6,7 +7,7 @@ from presto.solvers.newton import newton_iteration
 from presto.utils import resolve_func, merge_args
 import presto.solvers.quasi_newton as qn
 import presto.solvers.newton as nu
-from presto.solvers.modified_newton import regularise
+from presto.solvers.modified_newton import regularise, gauss_newton_approx
 
 #TODO: resolve grad/hess 
 
@@ -31,7 +32,8 @@ def quasi_newton(hessian_approx_method, func, x, grad,
     if x_next is not None and g_next is None:
         g_next = gradient(func, x_next, grad, **func_args)
     quasi_newton_args = quasi_newton_args or {}
-    B_next = hessian_approx_method(x, g_cur, x_next, g_next, B_cur, inv, **quasi_newton_args)
+    quasi_newton_method = resolve_hessian_approx_method(hessian_approx_method) 
+    B_next = quasi_newton_method(x, g_cur, x_next, g_next, B_cur, inv, **quasi_newton_args)
     if g_next is None:
         g_next = g_cur
     p = newton_iteration(g_next, B_next, inv=inv) 
@@ -51,21 +53,32 @@ def broyden(func, x, grad, x_next=None, g_next=None, B_cur=None, inv=True, quasi
 
 def modified_newton(func, x, grad=None, hess=None, mod_method=None, mod_args=None, **func_args):
     gx = gradient(func, x, grad, **func_args)
-    hx = hessian(func, x, hess, grad, **func_args)   
+    print(f'gx: {gx}')
     mod_args = mod_args or {}
     mod_method = mod_method or regularised_cholesky
+    if mod_method == gauss_newton_approx:
+        try:
+            hx = gauss_newton_approx(gx)
+            p = np.linalg.solve(hx, -gx)
+            return DescentDirectionOutput(p)
+        except ValueError:
+            warnings.warn('Jacobian has insufficient dimension for Gauss Newton - switching to regularised Cholesky')
+            mod_method = regularised_cholesky
+            pass
+
+    hx = hessian(func, x, hess, grad, **func_args)   
     L = mod_method(hx, **mod_args) 
     y = scipy.linalg.solve_triangular(L, -gx, lower=True)
     p = scipy.linalg.solve_triangular(L.T, y, lower=False)
     return DescentDirectionOutput(p)
 
-# def conjugate_gradient(func, x, p_prev, beta, grad=None, *args, **kwargs):
-#     if grad is not None:
-#         g = grad 
-#     else:
-#         g = func.gradient(x, *args, **kwargs)
-#     p = - g + beta * p_prev 
-#     return DescentDirectionOutput(p)
+def conjugate_gradient(func, x, p_prev, beta, grad=None, *args, **kwargs):
+    if grad is not None:
+        g = grad 
+    else:
+        g = func.gradient(x, *args, **kwargs)
+    p = - g + beta * p_prev 
+    return DescentDirectionOutput(p)
 
 def hessian_boundedness(B, upper_bound):
     return condition_number(B) <= upper_bound
@@ -76,7 +89,7 @@ QUASI_NEWTON = [quasi_newton, bfgs, symmetric_rank_one, broyden]
 #CONJUGATE_GRADIENT = [conjugate_gradient]
 
 NEWTON_HESSIAN_UPDATES = [nu.newton]
-MODIFIED_NEWTON_HESSIAN_UPDATES = [regularised_cholesky, inexact_modified_cholesky]
+MODIFIED_NEWTON_HESSIAN_UPDATES = [regularised_cholesky, inexact_modified_cholesky, gauss_newton_approx]
 QUASI_NEWTON_HESSIAN_UPDATES = [qn.broyden, qn.bfgs, qn.symmetric_rank_one]
 
 NEWTON_METHODS = {
@@ -92,15 +105,16 @@ QUASI_NEWTON_METHODS = {
 
 NEWTON_MODIFICATION_METHODS = {
     'regularised_cholesky': regularised_cholesky,
-    'inexact_modified_cholesky': inexact_modified_cholesky,
+    'inexact_modified cholesky': inexact_modified_cholesky,
     'incomplete_cholesky': incomplete_cholesky,
-    'incomplete_LU': incomplete_LU
+    'incomplete_LU': incomplete_LU,
+    'gauss_newton': gauss_newton_approx
 }
 
-DIRECTIONS = {**NEWTON_METHODS, **QUASI_NEWTON_METHODS, 'gradient_descent': gradient_descent}
+DIRECTIONS = {**NEWTON_METHODS, **QUASI_NEWTON_METHODS, 'gradient descent': gradient_descent}
 
 def resolve_direction_method(f, methods=DIRECTIONS, name='direction'):
     return resolve_func(f, methods, name)
 
-def resolve_hessian_approx_method(f, methods=QUASI_NEWTON_METHODS, name='hessian_qpprox'):
-    return resolve_func(f, methods, name)
+def resolve_hessian_approx_method(f, methods=QUASI_NEWTON_METHODS, name='hessian approx', default=symmetric_rank_one):
+    return resolve_func(f, methods, name, default=default)

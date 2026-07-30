@@ -2,24 +2,37 @@ from functools import wraps, partial
 import time  
 import logging 
 from collections.abc import Callable
+import warnings
 
 logger = logging.getLogger(__name__)
 
-def resolve_func(f, methods: dict = None, name=''):
+def resolve_func(f, methods: dict = None, name='', default=None):
+    if f is None and default is not None:
+        return default
     if isinstance(f, str):
-        try:
+        if methods and f in methods:
             return methods[f]
-        except KeyError:
-            valid = ", ".join(methods)
-            raise NotImplementedError(
-                f"{name} method {f!r} is either not implemented or not in {methods}. "
-                f"Define a function yourself or choose one of: {valid}"
-            ) from None
+        if default is not None:
+            warnings.warn(f"{name} method {f!r} not available, using "
+                f"{getattr(default, '__name__', default)}", stacklevel=2)
+            return default
 
-    if isinstance(f, partial):
-        return f.func 
-    if isinstance(f, Callable):
-        return f
+        valid = ", ".join(methods or ())
+        raise NotImplementedError(
+            f"{name} method {f!r} is either not implemented, not valid, or not in {methods}. "
+            f"Pass a function yourself or choose one of: {valid}"
+        ) from None
+
+    elif isinstance(f, Callable):                    
+        func = f.func if isinstance(f, partial) else f
+        if func in methods.values() or not methods or default is None:
+            return f                                 
+    
+    if default is not None:
+        warnings.warn(f"{name} expected a method name or callable, got "
+                      f"{type(f).__name__}; using "
+                      f"{getattr(default, '__name__', default)}", stacklevel=2)
+        return default
     raise TypeError(
         f"{name} expected a method name string or callable, "
         f"got {type(f).__name__}"

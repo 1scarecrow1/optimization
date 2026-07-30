@@ -38,7 +38,7 @@ def coordinate_direction_set(n, neg=True):
     D = np.hstack((I, -I))
     return D 
 
-def direction_set(n):
+def positive_spanning_set(n):
     '''
     p_i = (1/2n)e - e_i for i=1,2,..,n, p_n+1 = (1/2n)e
     '''

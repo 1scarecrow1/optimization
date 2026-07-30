@@ -61,7 +61,7 @@ def plot_results(result, func_name=None, save_results=False):
     x_vals = np.array([it["x"] for it in iterations])
     func_vals = np.array([it["func"] for it in iterations])
     grad_vals = np.array([it["grad"] for it in iterations])
-    search_directions = np.array([it["search_direction"] for it in iterations])  
+    search_directions = np.array([it["step"] for it in iterations])  
 
     plot_contour(func, x_vals, direction, line_search_method, func_name=func_name) 
     plot_iterations(func_vals, grad_vals, search_directions, func_name=func_name, 
@@ -86,15 +86,25 @@ def main():
     #x0 = np.array([-1.2, 1.0])
     x0 = np.array([1.2, 1.2])
 
-    #objective_func = rosenbrock 
+    objective_func = rosenbrock 
     #func_summary = summarise_function(objective_func, x0)
     #print(func_summary)   
     
-    objective_func = lambda x: 10*x**2 - np.sin(x)
+    objective_func = lambda x: np.sum(10*x**2 - np.sin(x))
+    #objective_func = lambda x: l2_norm(np.sin(x))
+
+    # n = 4
+    # c = np.arange(n)
+    # xx, yy = np.meshgrid(c, c)
+    # A = 1 / (xx + yy + 1)
+    # b = np.ones(n)
+    # x0 = np.zeros(n)
+    # phi = lambda x: A @ x - np.sin(x)
+    # objective_func = lambda x: 0.5*(phi(x)-b).T @ (phi(x)-b)
 
     line_search_methods = {
-        'backtracking': {'a0': 1.0, 'c': 1e-4, 'rho': 0.5},
-        'wolfe': {'a_max': 1.0, 'a1':1.0, 'a0': 0, 'c1':1e-4, 'c2':0.9, 'max_trials':3},
+        'backtracking': {'a0': 1.0, 'c1': 1e-4, 'rho': 0.5},
+        'wolfe': {'a0': 1.0, 'a_max': 10.0, 'c1':1e-4, 'c2':0.9, 'max_iter':10, 'zoom_iter':10, 'interp_method':"cubic"},
     }
 
     initial_step = {'a0': 1.0}
@@ -108,7 +118,6 @@ def main():
     newton_params = {
         'solver': 'newton', 'line_search_method': 'backtracking', 
         'solver_args': {},
-        #{'prev_alpha': False},
         'line_search_args': line_search_methods['backtracking']
     }
     quasi_newton_args = {'update_inv': True}
@@ -124,38 +133,48 @@ def main():
         'solver_args': quasi_newton_args,
         'line_search_args': line_search_methods['backtracking']
     }
-
+    modified_newton_params = {
+        'solver': 'modified_newton', 'line_search_method': 'backtracking', 
+        'solver_args': {'mod_method': gauss_newton_approx},
+        'line_search_args': line_search_methods['backtracking']
+    }
     optimizer_params = {'conv_tol': 1e-5, 'max_iter':200}
     save_results=False
 
 
-    res_s = minimize(objective_func, x0, **sd_params,
-             prev_alpha=False, 
-             **optimizer_params)    
-    summarise_search(res_s, display_all=False) 
-    plot_results(res_s, save_results=save_results)
+    # res_s = minimize(objective_func, x0, **sd_params,
+    #          prev_alpha=False, 
+    #          **optimizer_params)    
+    # summarise_search(res_s, display_all=False) 
+    # plot_results(res_s, save_results=save_results)
 
     # res_n = minimize(objective_func, x0, **newton_params,                 
     #                 prev_alpha=False, **optimizer_params)    
     # summarise_search(res_n, display_all=False) 
     # plot_results(res_n, save_results=save_results)
 
-    # res_bb = minimize(objective_func, x0, 'sr1', 'backtracking', 
-    #          direction_args=quasi_newton_args,
+    # res_bb = minimize(objective_func, x0, 'bfgs', 'backtracking', 
+    #          solver_args=quasi_newton_args,
     #          line_search_args = line_search_methods['backtracking'],
     #          prev_alpha=False, 
     #          **optimizer_params)
     # summarise_search(res_bb, display_all=False) 
     # plot_results(res_bb, save_results=save_results)
 
-    # res_bw = minimize(objective_func, x0, bfgs, 'wolfe', 
-    #          direction_args=quasi_newton_args,
-    #          line_search_args = line_search_methods['wolfe'],
-    #          prev_alpha=False, 
-    #          **optimizer_params)
-    # summarise_search(res_bw, display_all=False) 
-    # plot_results(res_bw, save_results=save_results)
+    res_bw = minimize(objective_func, x0, symmetric_rank_one, 'wolfe', 
+             solver_args=quasi_newton_args,
+             line_search_args = line_search_methods['wolfe'],
+             prev_alpha=False, 
+             **optimizer_params)
+    summarise_search(res_bw, display_all=False) 
+    plot_results(res_bw, save_results=save_results)
 
+    # res_mn = minimize(objective_func, x0, **modified_newton_params,                 
+    #                 **optimizer_params)    
+    # summarise_search(res_mn, display_all=False) 
+    # plot_results(res_mn, save_results=save_results)
+
+                
     plt.show(block=True)
 
 OBJECTIVES = {

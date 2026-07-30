@@ -33,14 +33,15 @@ def broyden(x_cur, f_cur, x_next=None, f_next=None, j_cur=None, inv=False, scale
 
 def bfgs(x_cur, g_cur, x_next=None, g_next=None, B_cur=None, inv=False, scale=1.0):
     if B_cur is None:
-        mult = scale/l2_norm(g_cur) if not inv else l2_norm(g_cur)/scale
+        #mult = scale/l2_norm(g_cur) if not inv else l2_norm(g_cur)/scale
+        mult=scale
         B_cur = mult * np.identity(len(x_cur))  
     if x_next is None:
         return B_cur  
     s = x_next - x_cur 
     y = g_next - g_cur 
     c = y @ s
-    if c <= 0: 
+    if c <= 0: #if c <= 1e-12 * l2_norm(s) * l2_norm(y): return B_cur
         raise ValueError("Curvature condition violated - nonpositive curvature encountered. Secant equation only accepts positive/convex Hessian approximations")
     if inv:
         rho = 1 / c
@@ -54,7 +55,8 @@ def bfgs(x_cur, g_cur, x_next=None, g_next=None, B_cur=None, inv=False, scale=1.
 
 def symmetric_rank_one(x_cur, g_cur, x_next=None, g_next=None, B_cur=None, inv=False, scale=1.0, den_tol=1e-6):
     if B_cur is None:
-        mult = scale/l2_norm(g_cur) if not inv else l2_norm(g_cur)/scale
+        #mult = scale/l2_norm(g_cur) if not inv else l2_norm(g_cur)/scale
+        mult=scale
         B_cur = mult * np.identity(len(x_cur))  
     if x_next is None:
         return B_cur   
