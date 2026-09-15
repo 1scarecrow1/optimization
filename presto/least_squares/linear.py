@@ -1,5 +1,4 @@
 from functools import partial
-import warnings
 import numpy as np
 from scipy.linalg import cho_factor, cho_solve
 import presto.conjugate_gradient.optimize as cg
@@ -31,14 +30,14 @@ def linear_least_squares(func, x0, jac=None,
         iterations = None
 
     else:
-        res = solve_lstsq(J, b, x0, disp_full=True, conv_tol=conv_tol, max_iter=max_iter)
+        res = solve_lstsq(J.T @ J, J.T @ b, x0, disp_full=True, conv_tol=conv_tol, max_iter=max_iter)
         x, f_min, iterations, converged_flag = res.x, res.f_min, res.iterations, res.converged
 
     return MinimizeResult(
         x=x,
         f_min=f_min,
         iterations=iterations,
-        func=None,
+        func=func,
         solver='least squares',
         method=solver,
         converged=converged_flag
@@ -61,7 +60,9 @@ def qr_solve(A, b):
 
 def svd_solve(A, b):
     U, s, Vt = np.linalg.svd(A, full_matrices=False)
-    return Vt.T @ ((U.T @ b) / s)
+    rcond = max(A.shape) * np.finfo(float).eps 
+    keep = s > rcond * s[0]
+    return Vt[keep].T @ ((U[:, keep].T @ b) / s[keep])
 
 def cg_solve(A, b, x0, preconditioning=True, preconditioner=None, disp_full=False, conv_tol=1e-5, max_iter=100):
     res = cg.cg_solve(A, b, x0, preconditioning=preconditioning, preconditioner=preconditioner, conv_tol=conv_tol, max_iter=max_iter)

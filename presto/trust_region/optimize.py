@@ -7,18 +7,8 @@ import presto.solvers.solvers as solver
 from presto.solvers.solvers import NEWTON_HESSIAN_UPDATES, QUASI_NEWTON_HESSIAN_UPDATES
 from presto.gradients import gradient_func, hessian_func
 from presto.utils import timer, resolve_func, merge_args
-from dataclasses import dataclass
+from presto.minimize_res import MinimizeResult
 from collections.abc import Callable 
-
-@dataclass
-class MinimizeResult:
-    x: np.ndarray
-    f_min: float | np.ndarray
-    iterations: list[dict]
-    func: Callable
-    solver: Callable | str
-    trust_region_method: Callable | str
-
 
 @timer
 def minimize(func, x, solver, trust_region_method=dogleg, 
@@ -69,12 +59,13 @@ def minimize(func, x, solver, trust_region_method=dogleg,
 
     iterations = []
     converged = partial(check_convergence, conv_tol=conv_tol)
-
+    converged_flag = False
     for i in range(max_iter):
         iterations.append({'iter': i, 'step': p_cur, 'size': rad_cur, 'x': x_cur, 
                            'func': f_cur, 'grad': g_cur})
         if converged(g_cur):
             print(f'{solver.__name__} with {trust_region_method.__name__} converged in {i} iterations')
+            converged_flag = True
             break 
         if np.isclose(rad_cur, 0.0):
             warnings.warn(f'trust region radius close to 0: {rad_cur} - terminating search')
@@ -104,7 +95,8 @@ def minimize(func, x, solver, trust_region_method=dogleg,
         iterations=iterations,
         func=func,
         solver=solver,
-        trust_region_method=trust_region_method,
+        method=trust_region_method,
+        converged=converged_flag
     )
 
 

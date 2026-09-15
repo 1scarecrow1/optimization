@@ -34,7 +34,7 @@ rosenbrock.jacobian = rosenbrock_jacobian
 rosenbrock.hessian = rosenbrock_hessian
 
 class Rosenbrock:
-    def value(self, x):
+    def function(self, x):
         ...
 
     def gradient(self, x):
@@ -46,6 +46,6 @@ class Rosenbrock:
 
 # rosenbrock = Rosenbrock()
 
-# rosenbrock.value(x)
+# rosenbrock.function(x)
 # rosenbrock.gradient(x)
 # rosenbrock.hessian(x)

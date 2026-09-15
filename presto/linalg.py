@@ -63,7 +63,7 @@ def inexact_modified_cholesky(A):
     beta = l2_norm(B)
 
     if np.min(np.diag(B)) > 0:
-        alpha = 0 
+        alpha = 0.0
     else:
         alpha = beta/2
 

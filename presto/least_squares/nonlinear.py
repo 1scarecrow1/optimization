@@ -89,7 +89,7 @@ def levenberg_marquardt(func, x0, jac=None, loss_function='sq',
     method_args = {k: v for k, v in trust_region_args.items() if k not in ('rad0', 'D')}
 
     r = partial(func, **func_args) 
-    f = partial(resolve_loss_function(loss_function), r, **loss_function_args)
+    f = partial(resolve_func(loss_function, LOSS_FUNCTIONS, "loss function", quadratic_loss), r, **loss_function_args)
     jacobian = gradient_func(r, jac)    
 
     x_cur = np.asarray(x0, dtype=float)
