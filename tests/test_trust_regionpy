@@ -1,14 +1,12 @@
 """
-Trust-region subproblem solvers and the model machinery around them.
+Trust-region subproblem solvers
 
 The exact solvers are checked against conftest.subproblem_reference (independent
-eigen-expansion + bisection); the approximate ones against the two properties
-that make them usable at all - stay inside the region, and achieve at least the
-Cauchy-point decrease.
+eigen-expansion + bisection); the approximate ones are checked against two properties -
+stay inside the region, and achieve at least the Cauchy-point decrease.
 """
 import numpy as np
 import pytest
-
 from conftest import (hard_case, indefinite, model_value, spd,
                       subproblem_reference)
 from presto.trust_region.trust_region import (cauchy_point,
@@ -22,8 +20,6 @@ RTOL = 1e-6
 
 
 def cases():
-    """(id, g, B, radius) over the three regimes, each with an active and an
-    inactive constraint."""
     n = 4
     g = np.arange(1.0, n + 1)
     out = []
@@ -65,10 +61,6 @@ def test_cholesky_step_is_a_descent_step(name, g, B, rad):
 
 @pytest.mark.parametrize('rad', [0.05, 0.5, 5.0])
 def test_qr_matches_reference(rad, linear):
-    """
-    qr_trust_region_subproblem takes (r, J) and models 0.5||r + Jp||^2, so the
-    equivalent (g, B) for the reference is (J'r, J'J).
-    """
     J, r = linear.A, linear.b
     p = qr_trust_region_subproblem(r, J, rad)
     g, B = J.T @ r, J.T @ J
@@ -90,8 +82,7 @@ def test_cauchy_point_inside_region_and_decreases(name, g, B, rad):
 def test_dogleg_inside_region_and_beats_cauchy(name, g, B, rad):
     """
     Dogleg is only defined for PD B; on indefinite B it must fall back to
-    steepest descent rather than return a nonsense step. Either way it should
-    not do worse than the Cauchy point.
+    steepest descent
     """
     p = dogleg(g, B, rad)
     assert np.linalg.norm(p) <= rad * (1 + 1e-6)
@@ -101,7 +92,7 @@ def test_dogleg_inside_region_and_beats_cauchy(name, g, B, rad):
 
 @pytest.mark.parametrize('rad', [0.1, 1.0, 10.0])
 def test_generalised_cauchy_respects_elliptical_region(rad):
-    """With scaling D the constraint is ||Dp|| <= radius, not ||p||."""
+    """With scaling D the constraint is ||Dp|| <= radius"""
     n = 4
     g, B = np.arange(1.0, n + 1), spd(n)
     D = np.diag(np.linspace(1.0, 4.0, n))
@@ -160,12 +151,6 @@ def test_reduction_ratio(f_cur, f_next, m_next, expected):
 
 
 def test_reduction_ratio_guards_zero_predicted_decrease():
-    """
-    A model predicting no decrease must not divide by zero. The sign convention
-    is a design choice: a step that improves f gets +inf (accept and expand), a
-    step that worsens it gets 0 (reject). Note the exact tie f_next == f_cur
-    currently also returns +inf, so a zero-progress step is accepted.
-    """
     assert reduction_ratio(10.0, 9.0, 10.0) == np.inf       # improved
     assert reduction_ratio(10.0, 11.0, 10.0) == 0.0         # worsened
     assert np.isfinite(reduction_ratio(10.0, 11.0, 10.0))

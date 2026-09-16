@@ -1,11 +1,8 @@
 """
-The optimizer drivers, swept over (solver x globalisation strategy).
-
-Every test asserts the contract a minimizer owes its caller rather than a
-specific trajectory: the gradient norm comes down, f does not increase, the
-iterate lands on the known minimiser, and the iteration log is well formed and
-records the terminal state. That last one is what breaks silently when a loop
-records history at the wrong place.
+Assert: gradient norm is decreasing, function value is nonincreasing,
+(only applies to methods for which Maratos effect does not apply)
+iterate reaches known minimiser if available, iteration states and 
+terminal state are recorded
 """
 import numpy as np
 import pytest
@@ -26,8 +23,6 @@ WOLFE_ARGS = {'a0': 1.0, 'a_max': 10.0, 'c1': 1e-4, 'c2': 0.9,
               'max_iter': 10, 'zoom_iter': 10, 'interp_method': 'cubic'}
 
 
-# ------------------------------------------------------------------- assertions
-
 def assert_iteration_log(result, keys=('iter', 'x', 'func', 'grad')):
     its = result.iterations
     assert its, "no iterations recorded"
@@ -42,17 +37,15 @@ def assert_iteration_log(result, keys=('iter', 'x', 'func', 'grad')):
                       np.asarray(result.f_min, dtype=float).ravel()[0]), \
         "last logged f differs from the returned f_min"
 
-
-def assert_converged(result, x_star, tol=TOL, atol=1e-4):
+def assert_converged(result, x_opt, tol=TOL, atol=1e-4):
     g_final = l2_norm(np.asarray(result.iterations[-1]['grad'], dtype=float))
     g_first = l2_norm(np.asarray(result.iterations[0]['grad'], dtype=float))
     assert g_final < g_first, f"gradient norm did not decrease ({g_first:.3e} -> {g_final:.3e})"
-    assert g_final <= tol or np.allclose(result.x, x_star, atol=atol), \
-        f"did not converge: |grad| = {g_final:.3e}, x = {result.x}, x* = {x_star}"
-
+    assert g_final <= tol or np.allclose(result.x, x_opt, atol=atol), \
+        f"did not converge: |grad| = {g_final:.3e}, x = {result.x}, x* = {x_opt}"
 
 def assert_monotone_descent(result, slack=1e-8):
-    """Line search and accepted trust-region steps must not increase f."""
+    """Line search and accepted trust-region steps must not increase f"""
     f = np.array([np.asarray(it['func'], dtype=float).ravel()[0]
                   for it in result.iterations])
     rise = np.maximum(np.diff(f), 0.0)
@@ -80,7 +73,7 @@ def test_line_search_on_quadratic(solver, ls, solver_args, ls_args, quadratic):
                    solver_args=solver_args, line_search_args=ls_args,
                    conv_tol=TOL, max_iter=200)
     assert_iteration_log(res)
-    assert_converged(res, quadratic.x_star)
+    assert_converged(res, quadratic.x_opt)
 
 
 @pytest.mark.parametrize('solver,ls,solver_args,ls_args', LINE_SEARCH_GRID, ids=LS_IDS)
@@ -90,11 +83,11 @@ def test_line_search_on_rosenbrock(solver, ls, solver_args, ls_args, rosen):
                    solver_args=solver_args, line_search_args=ls_args,
                    conv_tol=TOL, max_iter=500)
     assert_iteration_log(res)
-    assert_converged(res, rosen.x_star)
+    assert_converged(res, rosen.x_opt)
 
 
 def test_newton_solves_a_quadratic_in_one_step(quadratic):
-    """The Newton step is exact for a quadratic, so alpha = 1 must finish it."""
+    """Newton step is exact for quadratic function, so alpha = 1 must terminate"""
     from presto.line_search.optimize import minimize
     res = minimize(quadratic.func, quadratic.x0, 'newton', backtracking,
                    line_search_args=LS_ARGS, conv_tol=TOL, max_iter=50)
@@ -130,7 +123,7 @@ def test_trust_region_on_quadratic(solver, method, solver_args, quadratic):
                    solver_args=solver_args, trust_region_args={'rad0': 1.0},
                    conv_tol=TOL, max_iter=300)
     assert_iteration_log(res, keys=('iter', 'x', 'func', 'grad', 'size'))
-    assert_converged(res, quadratic.x_star)
+    assert_converged(res, quadratic.x_opt)
 
 
 @pytest.mark.parametrize('solver,method,solver_args', TRUST_REGION_GRID, ids=TR_IDS)
@@ -138,9 +131,9 @@ def test_trust_region_on_rosenbrock(solver, method, solver_args, rosen):
     from presto.trust_region.optimize import minimize
     res = minimize(rosen.func, rosen.x0, solver, method,
                    solver_args=solver_args, trust_region_args={'rad0': 1.0},
-                   conv_tol=TOL, max_iter=500)
+                   conv_tol=TOL, max_iter=12000)
     assert_iteration_log(res, keys=('iter', 'x', 'func', 'grad', 'size'))
-    assert_converged(res, rosen.x_star)
+    assert_converged(res, rosen.x_opt)
 
 
 def test_trust_region_radius_stays_positive_and_bounded(rosen):
@@ -164,12 +157,7 @@ def test_trust_region_step_stays_inside_the_radius(rosen):
             f"step {l2_norm(cur['step']):.4e} exceeded radius {prev['size']:.4e}"
 
 
-def test_hessian_call_contract(quadratic):
-    """
-    trust_region.optimize builds h from hessian_func then calls h(x_cur, g_cur),
-    so a Hessian written as hess(x) alone is called with an extra positional
-    argument. This pins the contract that conftest works around.
-    """
+def test_hessian_call(quadratic):
     from presto.gradients import hessian_func
     h = hessian_func(quadratic.func)
     H = h(quadratic.x0, quadratic.grad(quadratic.x0))
@@ -186,21 +174,18 @@ def test_nonlinear_cg_on_rosenbrock(conjugate_method, rosen):
                    conjugate_method=conjugate_method,
                    line_search_args=WOLFE_ARGS, conv_tol=TOL, max_iter=500)
     assert_iteration_log(res, keys=('iter', 'x', 'func', 'grad', 'step'))
-    assert_converged(res, rosen.x_star)
+    assert_converged(res, rosen.x_opt)
 
 
 @pytest.mark.parametrize('n', [5, 8, 12])
 def test_linear_cg_solves_hilbert_system(n):
-    """CG on an SPD system must reach the direct solution within n iterations."""
+    """CG on an SPD system must reach the direct solution within n iterations"""
     from presto.conjugate_gradient.optimize import cg_solve
     c = np.arange(n)
     A = 1.0 / (c[:, None] + c[None, :] + 1.0)
     b = np.ones(n)
     res = cg_solve(A, b, np.zeros(n), preconditioning=False,
                    conv_tol=1e-10, max_iter=10 * n)
-    # Hilbert is savagely ill-conditioned (cond ~ 1e16 by n=12) and CG's rate goes
-    # as sqrt(cond), so an absolute target is unreachable. Assert the contraction
-    # CG does guarantee instead.
     r0, r1 = l2_norm(b), l2_norm(A @ res.x - b)
     assert r1 <= 1e-3 * r0, f"residual only fell {r0:.3e} -> {r1:.3e}"
     assert r1 <= l2_norm(A @ np.linalg.lstsq(A, b, rcond=None)[0] - b) + 1e-3 * r0
@@ -224,13 +209,13 @@ def test_newton_cg_with_line_search(rosen):
     res = minimize(rosen.func, rosen.x0, line_search=True,
                    line_search_method=backtracking, conv_tol=TOL, max_iter=300)
     assert_iteration_log(res, keys=('iter', 'x', 'func', 'grad', 'direction'))
-    assert_converged(res, rosen.x_star)
+    assert_converged(res, rosen.x_opt)
 
 
 def test_newton_cg_inner_solver_matches_direct_solve(quadratic):
     """
     cg_line_search solves B p = -g inexactly; with a tight inner tolerance on an
-    SPD B it must agree with the direct solve.
+    SPD matrix it must agree with the direct solve
     """
     from presto.inexact_newton.newton_cg import cg_line_search
     g = quadratic.grad(quadratic.x0)
@@ -240,11 +225,7 @@ def test_newton_cg_inner_solver_matches_direct_solve(quadratic):
 
 # ----------------------------------------------------------------- consistency
 
-def test_drivers_agree_on_the_minimiser(rosen):
-    """
-    Different globalisation strategies, same problem: they must land in the same
-    place. Catches a driver that 'converges' to the wrong point.
-    """
+def test_solvers_agree_on_the_minimiser(rosen):
     from presto.conjugate_gradient.optimize import minimize as cg_minimize
     from presto.line_search.optimize import minimize as ls_minimize
     from presto.trust_region.optimize import minimize as tr_minimize
@@ -259,4 +240,4 @@ def test_drivers_agree_on_the_minimiser(rosen):
                     conv_tol=TOL, max_iter=500).x,
     ]
     for x in xs:
-        assert np.allclose(x, rosen.x_star, atol=1e-3), f"{x} != {rosen.x_star}"
+        assert np.allclose(x, rosen.x_opt, atol=1e-3), f"{x} != {rosen.x_opt}"

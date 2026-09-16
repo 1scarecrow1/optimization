@@ -1,17 +1,12 @@
 """
 Least squares: the linear solvers against numpy's reference, and the nonlinear
-drivers (Gauss-Newton, Levenberg-Marquardt) on problems whose answer is known.
+solvers (Gauss-Newton, Levenberg-Marquardt) on problems whose answer is known.
 
-The linear tests deliberately use an ill-conditioned overdetermined system,
-because that is where the differences between the methods show up: forming the
-normal equations squares the condition number, and any solver that does it twice
-loses badly.
+The linear tests deliberately use an ill-conditioned overdetermined system.
 """
 from types import SimpleNamespace
-
 import numpy as np
 import pytest
-
 from presto.least_squares.linear import (cg_solve, cholesky_solve, qr_solve,
                                          svd_solve)
 from presto.least_squares.nonlinear import gauss_newton, levenberg_marquardt
@@ -30,14 +25,13 @@ TOL = 1e-5
 def test_linear_solver_matches_numpy_lstsq(solver, linear):
     x = solver(linear.A, linear.b)
     assert x.shape == (linear.n,), f"expected shape ({linear.n},), got {np.shape(x)}"
-    assert np.allclose(x, linear.x_star, rtol=1e-4, atol=1e-6), \
-        f"||x - x_lstsq|| = {l2_norm(x - linear.x_star):.3e}"
+    assert np.allclose(x, linear.x_opt, rtol=1e-4, atol=1e-6), \
+        f"||x - x_lstsq|| = {l2_norm(x - linear.x_opt):.3e}"
 
 
 @pytest.mark.parametrize('solver', [qr_solve, svd_solve, cholesky_solve],
                          ids=['qr', 'svd', 'cholesky'])
 def test_linear_solver_satisfies_the_normal_equations(solver, linear):
-    """A'(Ax - b) = 0 is the defining property of the least squares solution."""
     x = solver(linear.A, linear.b)
     grad = linear.A.T @ (linear.A @ x - linear.b)
     assert l2_norm(grad) <= 1e-6 * max(1.0, l2_norm(linear.A.T @ linear.b)), \
@@ -57,14 +51,14 @@ def test_cg_solve_on_normal_equations(linear):
     B, y = gauss_newton_approx(linear.A), linear.A.T @ linear.b
     x = cg_solve(B, y, np.zeros(linear.n), preconditioning=False,
                  conv_tol=1e-12, max_iter=500)
-    assert np.allclose(x, linear.x_star, rtol=1e-3, atol=1e-5), \
-        f"||x - x_lstsq|| = {l2_norm(np.asarray(x) - linear.x_star):.3e}"
+    assert np.allclose(x, linear.x_opt, rtol=1e-3, atol=1e-5), \
+        f"||x - x_lstsq|| = {l2_norm(np.asarray(x) - linear.x_opt):.3e}"
 
 
 def test_normal_equations_square_the_conditioning(linear):
     """
-    Documents why cholesky_solve should be handed A, not A'A: passing the Gauss-
-    Newton matrix in means the conditioning is squared a second time.
+    Checks that cholesky_solve is handed A, not A'A: passing the Gauss-
+    Newton matrix means the conditioning is squared a second time
     """
     cond_A = condition_number(linear.A)
     cond_AtA = condition_number(gauss_newton_approx(linear.A))
@@ -78,8 +72,8 @@ def test_gauss_newton_on_rosenbrock_residual(subproblem, rosen_residual):
     res = gauss_newton(rosen_residual.func, rosen_residual.x0,
                        jac=rosen_residual.jac, loss_function='quadratic',
                        subproblem_method=subproblem, max_iter=200)
-    assert np.allclose(res.x, rosen_residual.x_star, atol=1e-4), \
-        f"x = {res.x}, x* = {rosen_residual.x_star}"
+    assert np.allclose(res.x, rosen_residual.x_opt, atol=1e-4), \
+        f"x = {res.x}, x* = {rosen_residual.x_opt}"
 
 
 def test_gauss_newton_fits_exact_data(decay):
@@ -96,7 +90,7 @@ def test_gauss_newton_logs_the_terminal_state(rosen_residual):
                        jac=rosen_residual.jac, loss_function='quadratic',
                        subproblem_method='qr', max_iter=200)
     assert np.allclose(res.iterations[-1]['x'], res.x), \
-        "history does not end at the returned x: the convergence exit path " \
+        "iterations do not end at the returned x " \
         "does not record the final iterate"
 
 
@@ -108,34 +102,34 @@ def test_levenberg_marquardt_on_rosenbrock_residual(method, rosen_residual):
                               jac=rosen_residual.jac, loss_function='quadratic',
                               trust_region_method=method,
                               trust_region_args={'rad0': 1.0}, max_iter=300)
-    assert np.allclose(res.x, rosen_residual.x_star, atol=1e-4), \
-        f"x = {res.x}, x* = {rosen_residual.x_star}"
+    assert np.allclose(res.x, rosen_residual.x_opt, atol=1e-4), \
+        f"x = {res.x}, x* = {rosen_residual.x_opt}"
 
 
 def test_levenberg_marquardt_fits_exact_data(decay):
     res = levenberg_marquardt(decay.func, decay.x0, jac=decay.jac,
                               loss_function='quadratic',
                               trust_region_args={'rad0': 1.0}, max_iter=400)
-    assert np.allclose(res.x, decay.x_star, rtol=1e-3, atol=1e-4), \
-        f"theta = {res.x}, theta* = {decay.x_star}"
+    assert np.allclose(res.x, decay.x_opt, rtol=1e-3, atol=1e-4), \
+        f"theta = {res.x}, theta* = {decay.x_opt}"
 
 
 def test_levenberg_marquardt_logs_every_iteration(rosen_residual):
     """
     iterations must accumulate across the loop, and record the state on the
-    convergence / zero-radius exit paths as well as after a step.
+    convergence / zero-radius exit paths as well as after a step
     """
     res = levenberg_marquardt(rosen_residual.func, rosen_residual.x0,
                               jac=rosen_residual.jac, loss_function='quadratic',
                               trust_region_args={'rad0': 1.0}, max_iter=50)
     assert len(res.iterations) > 2, \
-        f"only {len(res.iterations)} entries logged: the history list is being " \
+        f"only {len(res.iterations)} entries logged: the iteration list is being " \
         "rebuilt inside the loop instead of appended to"
     assert np.allclose(res.iterations[-1]['x'], res.x)
 
 
 def test_levenberg_marquardt_is_monotone(rosen_residual):
-    """Rejected trust-region steps are not taken, so f must never increase."""
+    """Rejected trust-region steps are not taken, so f must never increase"""
     res = levenberg_marquardt(rosen_residual.func, rosen_residual.x0,
                               jac=rosen_residual.jac, loss_function='quadratic',
                               trust_region_args={'rad0': 1.0}, max_iter=300)
@@ -149,8 +143,7 @@ def test_levenberg_marquardt_rejects_g_b_subproblems(method, rosen_residual):
     """
     LM hands (residual, Jacobian) to the subproblem. dogleg and cauchy_point read
     that pair as (gradient, Hessian) and return a step that is not a descent
-    direction — measured: 14 iterations, x never leaves x0, no error raised.
-    The pairing must fail loudly, not silently do nothing.
+    direction. If x never leaves x0, no error raised.
     """
     from presto.run_optimizer import run_lm
     p = SimpleNamespace(kind='residual', name='r', func=rosen_residual.func,
@@ -182,7 +175,7 @@ def test_loss_function_resolves_to_a_callable(name):
 @pytest.mark.parametrize('name', sorted(set(('huber', 'absolute', 'quadratic'))))
 def test_registered_losses_share_the_func_x_signature(name):
     """
-    Everything in LOSS_FUNCTIONS is called as partial(loss, r)(x), so a registered
+    Everything in LOSS_FUNCTIONS is called as partial(loss, r)(x), so a
     loss must take (func, x, ...) and return a scalar.
     """
     from presto.least_squares.loss_functions import LOSS_FUNCTIONS
@@ -200,7 +193,6 @@ def test_quadratic_loss_is_half_squared_norm(rosen_residual):
 
 
 def test_residual_form_matches_the_scalar_objective(rosen_residual):
-    """0.5||r(x)||^2 == rosenbrock(x): the two problem statements must agree."""
     from presto.test_functions import rosenbrock
     for x in ([1.2, 1.2], [-1.2, 1.0], [0.0, 0.0], [1.0, 1.0]):
         x = np.asarray(x, dtype=float)
@@ -209,7 +201,6 @@ def test_residual_form_matches_the_scalar_objective(rosen_residual):
 
 
 def test_gauss_newton_gradient_equals_jt_r(rosen_residual):
-    """grad of 0.5||r||^2 is J'r - the identity both drivers are built on."""
     x = np.array([0.4, -0.7])
     r, J = rosen_residual.func(x), rosen_residual.jac(x)
     from presto.gradients import finite_difference
