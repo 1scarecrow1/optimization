@@ -3,6 +3,7 @@ from scipy.sparse import csc_array, csc_matrix, diags, issparse, identity
 from scipy.sparse.linalg import spilu, SuperLU, spsolve_triangular
 import scipy.sparse.linalg as sla
 from scipy.linalg import cho_factor, lu_factor, cho_solve, lu_solve
+from scipy.linalg.lapack import dlartg
 
 def ssor(A, omega=1.2):
     '''
@@ -145,6 +146,46 @@ def factorised_solver(A, lower=True):
         raise TypeError('invalid preconditioning method')
     return y, M
 
+def givens_rotations(R_upd, tol=0.0):
+    """
+    Given an existing Q and an augmented/modified R_upd, restore R_upd to
+    upper-triangular form using Givens rotations.
+
+        Q_new = block_diag(Q, I) @ Q_g
+        R_new = Q_g.T @ R_upd
+        Q_new @ R_new == block_diag(Q, I) @ R_upd
+
+    and the original embedded factors are recoverable by:
+        Q_base = Q_new @ Q_g.T
+        R_aug_original = Q_g @ R_new
+    """
+    m, n = R_upd.shape
+    R_new = R_upd.copy()
+    Q_g = np.eye(m) # gather Givens rotations
+
+    for j in range(min(m, n)):
+        for i in range(m - 1, j, -1):
+            if abs(R_new[i, j]) <= tol:
+                continue
+            c, s, _ = dlartg(R_new[i - 1, j], R_new[i, j])
+
+            # apply G to rows i-1 and i of R_new.
+            row_top = R_new[i - 1, :].copy()
+            row_bot = R_new[i, :].copy()
+
+            R_new[i - 1, :] =  c * row_top + s * row_bot
+            R_new[i,     :] = -s * row_top + c * row_bot
+
+            # accumulate Q_g so that:
+            # R_new = Q_g.T @ R_upd
+            # Q_new = Q_base @ Q_g
+            # Since this step used R <- G @ R, accumulate Q_g <- Q_g @ G.T.
+            col_left = Q_g[:, i - 1].copy()
+            col_right = Q_g[:, i].copy()
+            Q_g[:, i - 1] =  c * col_left + s * col_right
+            Q_g[:, i]     = -s * col_left + c * col_right
+
+    return Q_g, R_new
 
 def l2_norm(x):
     x = np.asarray(x, dtype=float)
