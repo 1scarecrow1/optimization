@@ -1,15 +1,15 @@
+import logging
 import warnings
-
 import numpy as np
 from presto.gradients import gradient, hessian
 from presto.linalg import l2_norm, inverse
 
+logger = logging.getLogger(__name__)
 machine_eps = np.finfo(np.float32).eps
 
 def minimize(grad, x, hess, max_iter=100, tol=1e-4, eps=machine_eps):
     '''
     Solve f'(x) = 0
-    TODO: Implement for vector and matrix valued func
     '''
     x = roots(grad, x, hess, max_iter=max_iter, tol=tol, eps=eps)
     return x  
@@ -18,7 +18,6 @@ def roots(func, x, grad, max_iter=200, tol=1e-4, eps=machine_eps):
     '''
     Solve f(x) = 0 or f'(x) = 0
     For f'(x) = 0, func is grad and grad is hess
-    TODO: Implement for vector and matrix valued func
     '''
     x = np.array(x)
     f_cur = func(x)
@@ -54,7 +53,8 @@ def roots(func, x, grad, max_iter=200, tol=1e-4, eps=machine_eps):
     return x  
 
 def newton(func, x, grad=None, hess=None, **kwargs):
-    gx = gradient(func, x, grad, **kwargs)
+    if grad is None:
+        grad = gradient(func, x, grad, **kwargs)
     hx = hessian(func, x, hess, grad, **kwargs)   
     return hx
 

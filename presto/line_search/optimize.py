@@ -1,6 +1,7 @@
-from functools import partial 
-import numpy as np 
-from presto.linalg import * 
+from functools import partial
+import logging
+import numpy as np
+from presto.linalg import *
 from presto.solvers.solvers import DIRECTIONS, QUASI_NEWTON, resolve_direction_method
 from presto.line_search.line_search import LINE_SEARCH_METHODS
 from presto.gradients import gradient_func, hessian_func
@@ -8,6 +9,8 @@ from presto.utils import timer, resolve_func, merge_args
 from dataclasses import dataclass
 from collections.abc import Callable 
 from presto.minimize_res import MinimizeResult
+
+logger = logging.getLogger(__name__)
 
 @timer
 def minimize(func, x, solver, line_search_method, 
@@ -52,10 +55,9 @@ def minimize(func, x, solver, line_search_method,
         iterations.append({'iter': i, 'step': alpha*p_cur.p, 'alpha': alpha, 'x': x_cur, 
                            'func': f_cur, 'grad': g_cur})
         if converged(g_cur):
-            print(f'{direction.__name__} with {line_search.func.__name__} converged in {i} iterations')
+            logger.info(f'{direction.__name__} with {line_search.func.__name__} converged in {i} iterations')
             converged_flag=True
             break 
-        # variables needed should be fed into a state and unpacked by respective line search method
         alpha, x_next, f_next = line_search(x_cur, f_cur, g_cur, p_cur.p, a0=a0) 
         g_next = g(x_next)
 
@@ -83,10 +85,7 @@ def minimize(func, x, solver, line_search_method,
         converged=converged_flag
     )
 
-def check_convergence(grad, conv_tol=1e-5):
-    """
-    TODO: Use test_terminal_steepest_descent 
-    """      
+def check_convergence(grad, conv_tol=1e-5):  
     return l2_norm(grad) < conv_tol
 
 def test_terminal_steepest_descent(p, grad):

@@ -47,7 +47,6 @@ def cg_steihaug(g_cur, B_cur, rad_cur, tol_cur=None, max_iter=100):
         r_cur, z_cur = r_next, z_next
         rr = rr_next
 
-    print(f'failed to converge after {max_iter} iterations')
     warnings.warn(
         f"CG Steihaug failed to converge after {max_iter} iterations"
         f"returning the last direction", RuntimeWarning)

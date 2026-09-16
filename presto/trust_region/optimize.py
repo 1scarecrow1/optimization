@@ -1,14 +1,18 @@
 from functools import partial
-import warnings 
-import numpy as np 
+import logging
+import warnings
+import numpy as np
 from presto.linalg import * 
 from presto.trust_region.trust_region import quadratic_model, general, trust_region_subproblem, dogleg, check_convergence, TRUST_REGION_METHODS
 import presto.solvers.solvers as solver 
-from presto.solvers.solvers import NEWTON_HESSIAN_UPDATES, QUASI_NEWTON_HESSIAN_UPDATES
+from presto.solvers.newton import NEWTON_HESSIAN_UPDATES
+from presto.solvers.quasi_newton import QUASI_NEWTON_HESSIAN_UPDATES
 from presto.gradients import gradient_func, hessian_func
 from presto.utils import timer, resolve_func, merge_args
 from presto.minimize_res import MinimizeResult
-from collections.abc import Callable 
+from collections.abc import Callable
+
+logger = logging.getLogger(__name__)
 
 @timer
 def minimize(func, x, solver, trust_region_method=dogleg, 
@@ -32,10 +36,11 @@ def minimize(func, x, solver, trust_region_method=dogleg,
     f = partial(func, **func_args)
     g = partial(gradient, **func_args) if not isinstance(gradient, partial) else gradient 
 
-    if solver in NEWTON_HESSIAN_UPDATES:
+    is_newton = solver in NEWTON_HESSIAN_UPDATES.values()
+    if is_newton:
         hessian = hessian_func(func, grad, hess, **func_args)
-        h = partial(hessian, f, **func_args) if not isinstance(hessian, partial) else hessian
-    elif solver in QUASI_NEWTON_HESSIAN_UPDATES:
+        h = partial(hessian, **func_args) if not isinstance(hessian, partial) else hessian
+    elif solver in QUASI_NEWTON_HESSIAN_UPDATES.values():
         h = partial(solver, **hessian_approx_args)
     else:
         raise NotImplementedError
@@ -44,8 +49,8 @@ def minimize(func, x, solver, trust_region_method=dogleg,
     rad_cur = trust_region_args.get('rad0', 100.0)
     f_cur = f(x_cur) 
     g_cur = g(x_cur) 
-    h_cur = h(x_cur, g_cur)
-    p_cur = np.zeros_like(x_cur) 
+    h_cur = h(x_cur) if is_newton else h(x_cur, g_cur)
+    p_cur = np.zeros_like(x_cur)
 
     if precondition:
         preconditioner = preconditioner if preconditioner is not None else inexact_modified_cholesky
@@ -64,7 +69,7 @@ def minimize(func, x, solver, trust_region_method=dogleg,
         iterations.append({'iter': i, 'step': p_cur, 'size': rad_cur, 'x': x_cur, 
                            'func': f_cur, 'grad': g_cur})
         if converged(g_cur):
-            print(f'{solver.__name__} with {trust_region_method.__name__} converged in {i} iterations')
+            logger.info(f'{solver.__name__} with {trust_region_method.__name__} converged in {i} iterations')
             converged_flag = True
             break 
         if np.isclose(rad_cur, 0.0):
@@ -73,9 +78,9 @@ def minimize(func, x, solver, trust_region_method=dogleg,
         p_cur, x_next, f_cur, rad_cur = general_solve(x_cur, f_cur, g_cur, h_cur, rad_cur)
         if not np.allclose(p_cur, 0):
             g_next = g(x_next)
-            if solver in NEWTON_HESSIAN_UPDATES:
-                h_cur = h(x_next, g_next)
-            elif solver in QUASI_NEWTON_HESSIAN_UPDATES:
+            if is_newton:
+                h_cur = h(x_next)
+            else:
                 h_cur = h(x_cur, g_cur, x_next, g_next, h_cur)
             if precondition:
                 L = preconditioner(h_cur)

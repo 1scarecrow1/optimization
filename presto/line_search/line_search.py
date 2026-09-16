@@ -136,7 +136,7 @@ def bracket_zoom(f, g, x_cur, p_cur, suff_decrease, suff_curvature, a_lo, a_hi, 
 
 def wolfe_cond(f_next, f_cur, g_next, g_cur, p_cur, alpha, c1, c2):
     return (
-        sufficient_decrease(f_cur=f_cur, f_next=f_next, g_cur=g_cur, p_cur=p_cur, alpha=alpha, c=c1) and
+        sufficient_decrease(f_cur=f_cur, f_next=f_next, g_cur=g_cur, p_cur=p_cur, alpha=alpha, c1=c1) and
         curvature(g_cur=g_cur, g_next=g_next, p_cur=p_cur, c2=c2)
             )
 

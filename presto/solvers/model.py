@@ -2,7 +2,7 @@ import numpy as np
 
 class Curvature:
     """
-    Curvature of the local model, however it happens to be supplied.
+    Curvature of the local model.
 
         dense  : B is an (n,n) symmetric matrix
         matvec : B is a callable p -> Bp          (Hessian-free: Newton-CG/Lanczos, L-BFGS)
