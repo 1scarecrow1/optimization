@@ -115,7 +115,7 @@ Anything here can also be a callable with the same signature.
 `presto.linalg` has the supporting numerics: LU with and without pivoting, Cholesky, modified and
 incomplete Cholesky, Givens QR, triangular solves, SSOR, and matrix property predicates.
 
-## Compared to SciPy
+## Compared to `scipy.optimize`
 
 What you can change here that SciPy won't let you change, plus a few things it has no public
 interface for at all.
