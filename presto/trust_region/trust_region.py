@@ -114,15 +114,15 @@ def dogleg(g_cur, B_cur, rad_cur, D_cur=None, rad_tol=1e-3):
     '''
     curvature = g_cur @ B_cur @ g_cur
     if curvature <= 0 or rad_cur < rad_tol:
-        return - rad_cur * g_cur / l2_norm(g_cur) # fall back to steepest descent
+        return cauchy_point(g_cur, B_cur, rad_cur, D_cur) # fall back to cauchy point, which is just scaled steepest descent
     try:
         L = cho_factor(B_cur)                    
         p_b = cho_solve(L, -g_cur)
     except np.linalg.LinAlgError:
         warnings.warn(
             f"Hessian is not PD"
-            f"falling back to scaled steepest descent direction")
-        return -rad_cur * g_cur / l2_norm(g_cur)  # B not PD -> fall back to steepest descent
+            f"falling back to cauchy point")
+        return cauchy_point(g_cur, B_cur, rad_cur, D_cur)  # B not PD -> fall back to cauchy point
     if l2_norm(p_b) <= rad_cur:
         return p_b
     p_u = - (g_cur @ g_cur / curvature) * g_cur
@@ -166,9 +166,6 @@ def cholesky_trust_region_subproblem(g_cur, B_cur, rad_cur, D_cur=None, lamb_tol
     Hard case - ‖p(λ)‖ < Δ with λ pinned at -λ_min(B): g has (numerically) no component along
     the smallest eigenvector z, so no λ ever puts p on the boundary. The solution
     is p* = p + τz with ‖p + τz‖ = Δ.
-
-    This is the one branch where an eigendecomposition earns its cost: it is rare,
-    and it is the only place the eigenvector itself - not just λ_min - is needed.
     '''
     g_cur = np.asarray(g_cur, dtype=float)
     B_cur = np.asarray(B_cur, dtype=float)
@@ -303,9 +300,10 @@ def qr_trust_region_subproblem(r_cur, j_cur, rad_cur, D_cur=None, lamb_tol=1e-8,
     except np.linalg.LinAlgError:
         pass                       
 
-    r_norm = l2_norm(r_cur)
-    j_norm = np.abs(j_cur).sum(axis=1).max()
-    j_diag = np.diagonal(j_cur).copy()
+    b_cur = j_cur.T @ j_cur
+    r_norm = l2_norm(j_cur.T @ r_cur)
+    j_norm = np.abs(b_cur).sum(axis=1).max()
+    j_diag = np.diagonal(b_cur).copy()
     a = r_norm/rad_cur
     lamb_lo = max(0.0, -j_diag.min(), a - j_norm) 
     lamb_hi = max(lamb_lo, a + j_norm)
@@ -335,7 +333,7 @@ def qr_trust_region_subproblem(r_cur, j_cur, rad_cur, D_cur=None, lamb_tol=1e-8,
             p = solve_triangular(R_tri, -(Q_g.T @ qres)[:n])
 
         except (np.linalg.LinAlgError, ValueError):
-            # Increase λ and update R
+            # increase λ and update R
             lamb_lo = lamb
             lamb = max(np.sqrt(lamb_lo * lamb_hi),
                        lamb_lo + 0.01 * (lamb_hi - lamb_lo))
@@ -390,14 +388,14 @@ def givens_rotations(R_upd, tol=0.0):
                 continue
             c, s, _ = dlartg(R_new[i - 1, j], R_new[i, j])
 
-            # Apply G to rows i-1 and i of R_new.
+            # apply G to rows i-1 and i of R_new.
             row_top = R_new[i - 1, :].copy()
             row_bot = R_new[i, :].copy()
 
             R_new[i - 1, :] =  c * row_top + s * row_bot
             R_new[i,     :] = -s * row_top + c * row_bot
 
-            # Accumulate Q_g so that:
+            # accumulate Q_g so that:
             # R_new = Q_g.T @ R_upd
             # Q_new = Q_base @ Q_g
             # Since this step used R <- G @ R, accumulate Q_g <- Q_g @ G.T.
