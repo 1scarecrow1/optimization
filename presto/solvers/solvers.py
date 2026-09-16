@@ -67,17 +67,9 @@ def modified_newton(func, x, grad=None, hess=None, mod_method=None, mod_args=Non
     if isinstance(L, SuperLU):
         p = L.solve(-gx)
         return DescentDirectionOutput(p)
-
+    import scipy
     y = scipy.linalg.solve_triangular(L, -gx, lower=True)
     p = scipy.linalg.solve_triangular(L.T, y, lower=False)
-    return DescentDirectionOutput(p)
-
-def conjugate_gradient(func, x, p_prev, beta, grad=None, *args, **kwargs):
-    if grad is not None:
-        g = grad 
-    else:
-        g = func.gradient(x, *args, **kwargs)
-    p = - g + beta * p_prev 
     return DescentDirectionOutput(p)
 
 def hessian_boundedness(B, upper_bound):
@@ -86,7 +78,6 @@ def hessian_boundedness(B, upper_bound):
 GRADIENT_DESCENT = [gradient_descent]
 NEWTON = [newton, modified_newton]
 QUASI_NEWTON = [quasi_newton, bfgs, symmetric_rank_one, broyden]
-#CONJUGATE_GRADIENT = [conjugate_gradient]
 
 NEWTON_SOLVERS = {
     'newton': newton,
