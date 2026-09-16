@@ -11,6 +11,14 @@ each one takes either an existing implementation in presto or a function of your
 ## Install
 
 ```
+pip install presto-opt
+```
+
+The distribution is `presto-opt`; the import name is `presto`.
+
+From source:
+
+```
 git clone https://github.com/1scarecrow1/optimization.git
 cd optimization
 pip install -e .
