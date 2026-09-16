@@ -32,20 +32,3 @@ def rosenbrock_hessian(x, a=1, b=100):
 rosenbrock.gradient = rosenbrock_gradient
 rosenbrock.jacobian = rosenbrock_jacobian
 rosenbrock.hessian = rosenbrock_hessian
-
-class Rosenbrock:
-    def function(self, x):
-        ...
-
-    def gradient(self, x):
-        ...
-
-    def hessian(self, x):
-        ...
-
-
-# rosenbrock = Rosenbrock()
-
-# rosenbrock.function(x)
-# rosenbrock.gradient(x)
-# rosenbrock.hessian(x)
