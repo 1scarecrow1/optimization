@@ -215,15 +215,16 @@ def invert_matrix(A):
         return moore_penrose_inverse(A)
     return np.linalg.solve(A, np.identity(A.shape[0]))
 
-def moore_penrose_inverse(A, left=False):
+def moore_penrose_inverse(A):
     if np.ndim(A) != 2:
         raise TypeError("argument must be a matrix with shape (m, n)")
-    if left:
-        I = np.identity(A.shape[0])
-        A_inv_l = A.T @ np.linalg.solve(A @ A.T, I) 
+    m, n = A.shape
+    if m >= n:
+        I = np.identity(n)
+        A_inv_l = np.linalg.solve(A.T @ A, I) @ A.T
         return A_inv_l
-    I = np.identity(A.shape[1])
-    A_inv_r = np.linalg.solve(A.T @ A, I) @ A.T 
+    I = np.identity(m)
+    A_inv_r = A.T @ np.linalg.solve(A @ A.T, I)
     return A_inv_r
 
 def condition_number(x):
