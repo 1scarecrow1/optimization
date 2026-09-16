@@ -24,10 +24,6 @@ def gauss_newton_model(f, r, J, p, D=None):
     res = r + J @ p
     return 0.5 * (res @ res)
 
-def quadratic_model_jacp(fx, jac, p):
-    jacp = jac @ p 
-    return fx + jacp + 0.5 * jacp.T @ jacp 
-
 def trust_region_constraint(radius, px, lamb, D=None):
     if D is not None:
         px = D @ px 
@@ -237,7 +233,7 @@ def cholesky_trust_region_subproblem(g_cur, B_cur, rad_cur, D_cur=None, lamb_tol
         q = solve_triangular(L, p, lower=True)        # reads the lower triangle only
         lamb_next = lamb + (p_norm / np.sqrt(q @ q))**2 * (p_norm - rad_cur) / rad_cur
 
-        # safeguard: bisect whenever Newton leaves the bracket
+        # bisect whenever Newton leaves the bracket
         if not (lamb_lo < lamb_next < lamb_hi):
             lamb_next = 0.5 * (lamb_lo + lamb_hi)
         lamb = lamb_next
