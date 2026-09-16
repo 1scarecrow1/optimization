@@ -20,9 +20,8 @@ def hessian(fun, x, hess=None, grad=None, **fun_args):
 
 def gradient_func(fun, grad=None, **kwargs):
     if grad is not None:
-        return grad 
-    if isinstance(fun, partial):
-        #fun_args, fun_kwargs = fun.args, fun.keywords
+        return grad
+    if isinstance(fun, partial) and not fun.args:
         fun_kwargs = fun.keywords
         fun = fun.func
     else:
@@ -34,7 +33,7 @@ def gradient_func(fun, grad=None, **kwargs):
 def hessian_func(fun, grad=None, hess=None, **kwargs):
     if hess is not None:
         return hess
-    if isinstance(fun, partial):
+    if isinstance(fun, partial) and not fun.args:
         fun_kwargs = fun.keywords
         fun = fun.func
     else:
@@ -46,16 +45,12 @@ def hessian_func(fun, grad=None, hess=None, **kwargs):
     return compute_hessian_func(fun, grad, **fun_kwargs)
 
 def compute_gradient_func(fun, **fun_args):
-    '''
-    TODO: Gradient and Hessian approximations 
-    Ideally, gradient approximation method should be automatically chosen
-    '''
     return partial(finite_difference, fun, central=False, **fun_args)
 
 def compute_hessian_func(fun, grad=None, **fun_args):
     if grad is None:
         grad = compute_gradient_func(fun, **fun_args)
-    return partial(finite_difference, fun=grad, central=False, **fun_args)
+    return partial(finite_difference, grad, central=False, **fun_args)
 
 def finite_difference(fun, x, fx=None, central=False, eps=eps, **fun_args):
     if fx is None:
