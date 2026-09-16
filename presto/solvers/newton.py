@@ -37,7 +37,7 @@ def roots(func, x, grad, max_iter=200, tol=1e-4, eps=machine_eps):
                 f"returning the last step", RuntimeWarning)
             return x 
         if stopping_criteria(f_cur, atol=tol):
-            print("root found")
+            logger.debug("root found")
             return x
         
         x = x_next
@@ -47,6 +47,7 @@ def roots(func, x, grad, max_iter=200, tol=1e-4, eps=machine_eps):
         x_next = x + step
         funcevals += 1
         gradevals += 1
+        
     warnings.warn(
         f"no solution found in {max_iter} iterations "
         f"returning the last step found", RuntimeWarning)
