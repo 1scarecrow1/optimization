@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
+import logging
 import warnings
 import numpy as np
 from presto.gradients import gradient_func
@@ -10,6 +11,8 @@ from presto.least_squares.loss_functions import LOSS_FUNCTIONS, quadratic_loss
 from presto.line_search.line_search import backtracking, wolfe
 from presto.trust_region.trust_region import general, gauss_newton_model, qr_trust_region_subproblem
 from presto.utils import resolve_func
+
+logger = logging.getLogger(__name__)
 ###### Function supplied should be residual function 
 ###### Create loss function to minimize based on supplied function and specified loss function
 @dataclass
@@ -47,7 +50,7 @@ def gauss_newton(func, x0, jac=None, loss_function='sq',
     line_search_args = line_search_args or {}
     line_search_args['a0'] = 1.0 # overwrite any starting alpha values with 1
     alpha = line_search_args['a0']
-    line_search = partial(line_search_method, r, **line_search_args)
+    line_search = partial(line_search_method, f, **line_search_args)
 
     iterations = []
     for i in range(max_iter):
@@ -59,7 +62,7 @@ def gauss_newton(func, x0, jac=None, loss_function='sq',
             p_cur = solve_lstsq(j_cur, -r_cur)
         else:
             p_cur = solve_lstsq(j_cur, -r_cur, x_cur) 
-        alpha, x_cur, f_cur = line_search(x_cur, r_cur, j_cur, p_cur)
+        alpha, x_cur, f_cur = line_search(x_cur, f_cur, g_cur, p_cur)
         r_cur = r(x_cur)
         j_cur = J(x_cur)
         g_cur = j_cur.T @ r_cur         
@@ -112,7 +115,7 @@ def levenberg_marquardt(func, x0, jac=None, loss_function='sq',
             warnings.warn(f'trust region radius close to 0: {rad_cur} - terminating search')
             break 
         if converged(g_cur):
-            print(f'levenberg marquardt with {trust_region_method.__name__} converged in {i} iterations')
+            logger.info(f'levenberg marquardt with {trust_region_method.__name__} converged in {i} iterations')
             break        
         p_cur, x_cur, f_cur, rad_cur = general_solve(x_cur, f_cur, r_cur, j_cur, rad_cur)
         r_cur = r(x_cur)
