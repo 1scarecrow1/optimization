@@ -64,9 +64,9 @@ def timer2(func, log=print, enabled=True):
         return result
     return wrapper
 
-def timer(func=None, *, log=print, enabled=True):
+def timer(func=None, *, log=logger.debug, enabled=True):
     '''
-    Time every call to func. Statistics accumulate on the wrapper itself:
+    Time every call to func. Stats accumulate on the wrapper itself:
 
         minimize.calls    calls since the last reset
         minimize.total    summed wall time
@@ -91,7 +91,7 @@ def timer(func=None, *, log=print, enabled=True):
                 wrapper.total += d
                 log(f"{f.__name__}: {_fmt(d)} "
                     f"(call {wrapper.calls}, total {_fmt(wrapper.total)})")
-        wrapper.calls = 0                             # after @wraps, which copies f.__dict__
+        wrapper.calls = 0                             
         wrapper.total = 0.0
         wrapper.last = None
         wrapper.enabled = enabled
