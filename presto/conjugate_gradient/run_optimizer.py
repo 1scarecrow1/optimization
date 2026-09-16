@@ -119,7 +119,7 @@ def run_nonlinear_cg():
     plot_nonlinear_cg_convergence(res)
 
 def run_newton_cg():
-    from presto.inexact_newton import newton_cg, newton_lanczos
+    from presto.inexact_newton import newton_cg
     #x0 = [1.2, 1.2]
     x0 = np.array([-1.2, 1.0])
 

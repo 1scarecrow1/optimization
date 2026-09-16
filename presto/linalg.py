@@ -1,10 +1,7 @@
-from dataclasses import dataclass
 import numpy as np
-from presto.utils import timer
 from scipy.sparse import csc_array, csc_matrix, diags, issparse, identity
-from scipy.sparse.linalg import splu, spilu, SuperLU, spsolve_triangular
+from scipy.sparse.linalg import spilu, SuperLU, spsolve_triangular
 import scipy.sparse.linalg as sla
-import scipy
 from scipy.linalg import cho_factor, lu_factor, cho_solve, lu_solve
 
 def ssor(A, omega=1.2):
@@ -168,30 +165,27 @@ def l2_norm(x):
 
 def ssor_preconditioner(A, omega=1.2):
     """
-    Creates an SSOR preconditioner LinearOperator for SciPy iterative solvers.
-    A should be a symmetric positive-definite matrix (csc_matrix).
+    Creates an SSOR preconditioner LinearOperator for iterative solvers.
+    A should be SPD.
     """
     if not isinstance(A, csc_matrix):
         A = csc_matrix(A)
     
     n = A.shape[0]
-    # Extract diagonal (D), lower (L), and upper (U) parts
     D = A.diagonal()
     L = -A.multiply(A.indices < A.indptr[:-1, np.newaxis])
     U = -A.multiply(A.indices > A.indptr[:-1, np.newaxis])
 
-    # Preconditioner apply function
     def matvec(b):
         x = np.zeros_like(b, dtype=np.float64)
         
         # 1. Forward Sweep: (D + omega*L) * x_half = omega * b
-        # Using a direct solver for the triangular matrix
         for i in range(n):
             sum_val = L[i, :i] @ x[:i]
             x[i] = (omega * b[i] - (omega - 1) * D[i] * x[i] - omega * sum_val) / D[i]
             
         # 2. Backward Sweep: (D + omega*U) * x_new = omega * D * x_half + (1-omega)*D*x_half ...
-        # (Alternatively, the full SSOR matrix inverse is approximated)
+        # (alternatively, the full SSOR matrix inverse is approximated)
         x_half = x.copy()
         for i in range(n - 1, -1, -1):
             sum_val = U[i, i+1:] @ x_half[i+1:]
@@ -247,18 +241,13 @@ def spectral_decomposition(A):
     TODO: implement eigenvalue/vector
     '''
     d, q = np.linalg.eigh(A)
-    # q @ np.diag(d) @ q.T
     return d, q, q
 
 def svd(x):
-    '''
-    TODO: Fix left and right eigenvectors
-    '''
     a = x.T @ x 
     b = x @ x.T
     _, v = np.linalg.eigh(a)
     d, u = np.linalg.eigh(b)
-    #u @ np.diag(np.sqrt(d)) @ v.T
 
     return np.sqrt(d), u, v
 
@@ -267,24 +256,20 @@ def solve(A, b):
     if not is_square(A) or not is_PSD(A):
         b = A.T @ b
         A = A.T @ A 
-    if not 0 in np.diag(A):
-        P, L, U = LUdecomposition_with_pivoting(A)
-        b = P @ b
-
     try:
-        solve_cholesky(A, b)
+        return solve_cholesky(A, b)
     except np.linalg.LinAlgError:
         pass
+
+    P, L, U = LUdecomposition_with_pivoting(A)
+    b = P @ b
     y = forward_substitution(L, b)
     x = backward_substitution(U, y)
 
     return x
 
 def solve_cholesky(A, b):
-    try:
-        L = np.linalg.cholesky(A)
-    except np.linalg.LinAlgError:
-        print("matrix must be symmetric positive definite")
+    L = np.linalg.cholesky(A)
     y = forward_substitution(L, b)
     return backward_substitution(L.T, y)
 
@@ -402,17 +387,6 @@ def gaussian_ref(A, pivoting=False):
         h += 1
         k += 1
     return A
-
-def gaussian_elimination(A, *, pivoting=True):
-    """
-    Gaussian elimination, once, in place on a copy.
-
-    Returns (M, piv, pcols, perm, sign)
-    """ 
-
-    return 
-
-
 
 def rref(A, ref=False):
     if not ref:
@@ -552,8 +526,8 @@ def is_nonsingular(A):
         return False
     if is_triangular(A):
         return not (0 in np.diag(A))    
-    # if _is_strictly_diagonally_dominant(A):
-    #     return True
+    if _is_strictly_diagonally_dominant(A):
+        return True
     return rank(A) == A.shape[1]
 
 def is_PD(A):
@@ -585,16 +559,6 @@ def is_orthonally_diagonalisable(A):
     return is_symmetric(A)  
 
 def is_positive_definite(A):
-    # if not is_orthonally_diagonalisable(A):
-    #     return False
-    # return np.all(gaussian_pivots(A) > 0)
-    # if not is_symmetric(A):
-    #     return False
-    # try:
-    #     np.linalg.cholesky(A)
-    #     return True
-    # except np.linalg.LinAlgError:
-    #     return False
     r = _sym_eigs(A)
     return r is not None and np.all(r[0] > r[1])
 
@@ -633,8 +597,6 @@ def eigenvalues(A):
     else:
         raise NotImplementedError
 
-
-# use np.diag_indices instead
 
 def _is_strictly_diagonally_dominant(A):
     #return np.diag(A) > _off_diagonal_sum(A)

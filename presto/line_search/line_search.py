@@ -102,9 +102,6 @@ def frank_wolfe(func, x0, grad, A, max_iter=150, disp=True, **func_args):
 
     return x
 
-def taylor_approximation(func, x, x0=None, order=1):
-    return 
-
 def is_frank_wolfe_duality_gap_min(g_cur, x_cur, eps=1e-6):
     return g_cur @ x_cur - np.min(g_cur) <= eps
 

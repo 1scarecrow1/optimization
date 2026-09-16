@@ -1,10 +1,12 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
+import warnings
 import numpy as np
 from presto.conjugate_gradient.conjugate_gradient import converged, fletcher_reeves
 from presto.gradients import gradient_func, hessian_func
 from presto.linalg import inexact_modified_cholesky, l2_norm, inverse
+from presto.trust_region.newton_cg import cg_steihaug
 from presto.trust_region.trust_region import solve_quadratic
 from presto.utils import merge_args
 
@@ -63,7 +65,7 @@ def minimize(func, x,
             p_cur = cg_line_search(g_cur, h_cur, tol_cur)
             _, x_cur, f_cur = line_search_func(x_cur=x_cur, f_cur=f_cur, g_cur=g_cur, p_cur=p_cur)
         else:
-            p_cur = cg_steihaug(g_cur, h_cur, tol_cur, rad_cur)
+            p_cur = cg_steihaug(g_cur, h_cur, rad_cur, tol_cur)
             p_cur = np.linalg.solve(L.T, p_cur)      # p = L⁻ᵀ p̂
             x_cur = x_cur + p_cur 
             f_cur = f(x_cur)
@@ -117,7 +119,7 @@ def cg_line_search(g_cur, B_cur, tol_cur, max_iter=100):
         c = B_cur @ d_cur
         r_cur = r_next
         rr = rr_next
-    print(f'failed to converge after {max_iter} iterations')
+    warnings.warn(f'newton cg failed to converge after {max_iter} iterations', RuntimeWarning)
     return z_cur   
 
 

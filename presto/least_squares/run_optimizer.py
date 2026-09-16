@@ -4,14 +4,14 @@ from types import SimpleNamespace
 
 import matplotlib.pyplot as plt
 import numpy as np
-
-from presto.conjugate_gradient.plotting import plot_nonlinear_cg_convergence
+from presto.plotting.conjugate_gradient import plot_nonlinear_cg_convergence
 from presto.least_squares.linear import LINEAR_LSTSQ_METHODS
 from presto.least_squares.nonlinear import gauss_newton, levenberg_marquardt
-from presto.least_squares.plotting import plot_fit, plot_lstsq_comparison, plot_residuals
+from presto.plotting.least_squares import plot_fit, plot_lstsq_comparison, plot_residuals
 from presto.line_search.line_search import backtracking
 from presto.linalg import condition_number, l2_norm
 from presto.plotting import name_of, plot_contour, plot_iterations
+from presto.reporting import attempt
 from presto.test_functions import rosenbrock
 from presto.trust_region.trust_region import (cholesky_trust_region_subproblem,
                                               dogleg, qr_trust_region_subproblem)
@@ -48,7 +48,7 @@ def exp_decay(t, theta):
 
 
 def make_decay_problem(m=40, theta_true=(2.5, 0.8, 0.5), noise=0.02, seed=0):
-    """y = A·exp(-k t) + c + noise.  m >> n = 3: exercises the m > n QR path."""
+    """y = A·exp(-k t) + c + epsilon.  m >> n"""
     rng = np.random.default_rng(seed)
     t = np.linspace(0.0, 6.0, m)
     y = exp_decay(t, np.asarray(theta_true, dtype=float)) + noise * rng.standard_normal(m)
@@ -69,7 +69,7 @@ def make_decay_problem(m=40, theta_true=(2.5, 0.8, 0.5), noise=0.02, seed=0):
 
 
 def make_linear_problem(m=30, n=6, seed=0):
-    """Hilbert-like A (same family as conjugate_gradient/run_optimizer) — ill-conditioned."""
+    """Hilbert-like ill-conditioned matrix"""
     rng = np.random.default_rng(seed)
     i = np.arange(m)[:, None]
     j = np.arange(n)[None, :]
@@ -79,7 +79,7 @@ def make_linear_problem(m=30, n=6, seed=0):
     return A, b, x_true
 
 
-# -------------------------------------------------------------------- reporting
+# -------------------------------------------------------------------- summarise results
 
 def summarise_function(residual, x, jac=None):
     r = residual(x)
@@ -110,11 +110,6 @@ def _stack(iterations, key):
 
 
 def plot_results(result, func=None, func_name=None, save_results=False):
-    """
-    Reuses presto.plotting for the n = 2 contour + convergence panels, and
-    presto.conjugate_gradient.plotting for the n != 2 case (gradient norm and
-    optimality gap, which need no 2-D path).
-    """
     its = result.iterations
     func = func if func is not None else result.func
     func_name = func_name or name_of(func)
@@ -138,18 +133,6 @@ def plot_results(result, func=None, func_name=None, save_results=False):
     if save_results:
         pass
 
-
-def _attempt(label, fn, *args, **kwargs):
-    """Report and continue — several least_squares paths are known-broken upstream."""
-    print(f"\n{'=' * 72}\n{label}\n{'=' * 72}")
-    try:
-        return fn(*args, **kwargs)
-    except Exception as exc:
-        print(f"  !! {label} failed: {type(exc).__name__}: {exc}")
-        return None
-
-
-# ------------------------------------------------------------------------- runs
 
 def run_linear(m=30, n=6):
     A, b, x_true = make_linear_problem(m, n)
@@ -223,7 +206,6 @@ def run_curve_fit(solver='lm', max_iter=200, **kwargs):
 
 
 def run_compare(x0=(-1.2, 1.0), max_iter=200):
-    """Same problem, every nonlinear method — iteration counts side by side."""
     rows = []
     configs = [
         ('gauss_newton (qr)',  run_gauss_newton,        {'subproblem_method': 'qr'}),
@@ -232,8 +214,8 @@ def run_compare(x0=(-1.2, 1.0), max_iter=200):
         ('lm (cholesky)',      run_levenberg_marquardt, {'trust_region_method': cholesky_trust_region_subproblem}),
         ('lm (dogleg)',        run_levenberg_marquardt, {'trust_region_method': dogleg}),
     ]
-    for label, fn, kw in configs:
-        res = _attempt(label, fn, x0=x0, max_iter=max_iter, **kw)
+    for label, func, kw in configs:
+        res = attempt(label, func, x0=x0, max_iter=max_iter, **kw)
         if res is not None:
             rows.append((label, len(res.iterations) - 1, float(res.f_min), l2_norm(res.x - 1.0)))
 
@@ -243,7 +225,6 @@ def run_compare(x0=(-1.2, 1.0), max_iter=200):
     return rows
 
 
-# ------------------------------------------------------------------------- main
 
 def parse_x0(s):
     return np.array([float(v) for v in s.split(",")])
@@ -261,26 +242,26 @@ RUNS = {
 
 
 def main():
-    _attempt('linear least squares', run_linear)
-    _attempt('gauss-newton on rosenbrock residuals', run_gauss_newton)
-    _attempt('levenberg-marquardt on rosenbrock residuals', run_levenberg_marquardt)
-    _attempt('exponential decay curve fit (LM)', run_curve_fit)
+    run_linear()
+    run_gauss_newton()
+    run_levenberg_marquardt()
+    run_curve_fit()
     plt.show(block=True)
 
 
 def run():
-    parser = argparse.ArgumentParser(description="drive presto.least_squares")
+    parser = argparse.ArgumentParser(description="run presto.least_squares")
     parser.add_argument("--run", choices=sorted(RUNS), default="compare")
     parser.add_argument("--x0", type=parse_x0, default="-1.2,1.0")
     parser.add_argument("--max_iter", type=int, default=200)
     parser.add_argument("--no_plot", action="store_true")
     args = parser.parse_args()
 
-    fn = RUNS[args.run]
+    func = RUNS[args.run]
     kwargs = {'max_iter': args.max_iter}
-    if fn is not run_linear:
+    if func is not run_linear:
         kwargs['x0'] = tuple(args.x0)
-    fn(**kwargs)
+    func(**kwargs)
     if not args.no_plot:
         plt.show(block=True)
 

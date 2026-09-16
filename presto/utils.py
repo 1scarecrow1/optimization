@@ -26,10 +26,8 @@ def resolve_func(f, methods: dict = None, name='', default=None):
             f"Pass a function yourself or choose one of: {valid}"
         )
 
-    elif isinstance(f, Callable):                    
-        func = f.func if isinstance(f, partial) else f
-        if not methods or func in methods.values() or default is None:
-            return f                                 
+    elif isinstance(f, Callable):
+        return f
     
     if default is not None:
         warnings.warn(f"{name} expected a method name or callable, got "
@@ -51,18 +49,6 @@ def merge_args(*dicts, check_dict=""):
             raise ValueError(f"conflicting keyword args {where} ({conflicts})")
         merged.update(d)
     return merged
-
-def timer2(func, log=print, enabled=True):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        total = 0
-        start = time.perf_counter()
-        result = func(*args, **kwargs)
-        duration = time.perf_counter() - start
-        total += duration
-        print(f"Execution time for {func.__name__}: {duration:.2f}, Total: {total:.2f}")
-        return result
-    return wrapper
 
 def timer(func=None, *, log=logger.debug, enabled=True):
     '''
