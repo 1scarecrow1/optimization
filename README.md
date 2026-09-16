@@ -1,6 +1,6 @@
 # presto
 
-*Numerical optimization in Python, following Nocedal & Wright.*
+## Numerical optimization in Python, following Nocedal & Wright
 
 Line search, trust region, conjugate gradient, least squares and quadratic programming.
 
