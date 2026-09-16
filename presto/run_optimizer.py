@@ -1,29 +1,12 @@
-"""
-One runner for every presto driver, replacing the four per-module
-run_optimizer.py scripts.
-
-    python -m presto.run_optimizer                        # sweep everything
-    python -m presto.run_optimizer --run trust_region
-    python -m presto.run_optimizer --run lm --problem decay --display
-    python -m presto.run_optimizer --run line_search --problem rosenbrock --x0 -1.2,1.0
-
-Problems and drivers are two independent registries. A problem declares its
-`kind` (scalar objective / residual vector / linear system) and a driver
-declares which kinds it accepts, so the sweep only pairs things that make
-sense and nothing has to be special-cased at the call site.
-"""
-import argparse
-from functools import partial
-from types import SimpleNamespace
-
 import matplotlib.pyplot as plt
 import numpy as np
-
 from presto.conjugate_gradient.conjugate_gradient import fletcher_reeves, polak_ribiere
 from presto.line_search.line_search import backtracking, wolfe
 from presto.linalg import condition_number, l2_norm
-from presto.reporting import attempt, compare, parse_x0, report, summarise_function
+from presto.reporting import compare, parse_x0, report, summarise_function
 from presto.test_functions import rosenbrock
+import argparse
+from types import SimpleNamespace
 
 plt.ion()
 
@@ -31,15 +14,11 @@ BACKTRACKING_ARGS = {'a0': 1.0, 'c1': 1e-4, 'rho': 0.5}
 WOLFE_ARGS = {'a0': 1.0, 'a_max': 10.0, 'c1': 1e-4, 'c2': 0.1,
               'max_iter': 25, 'zoom_iter': 25, 'interp_method': 'cubic'}
 
-
-# ------------------------------------------------------------------- problems
-
 def _rosenbrock():
     return SimpleNamespace(
         kind='scalar', name='rosenbrock', func=rosenbrock,
         grad=rosenbrock.gradient, hess=rosenbrock.hessian,
-        x0=np.array([1.2, 1.2]), x_star=np.ones(2), n=2)
-
+        x0=np.array([1.2, 1.2]), x_opt=np.ones(2), n=2)
 
 def _quadratic(n=4, cond=50.0):
     """f = ½xᵀAx − bᵀx with A SPD — every Newton-type method should finish in one step."""
@@ -56,12 +35,9 @@ def _quadratic(n=4, cond=50.0):
     f.hessian = lambda x, *_, **__: A
     return SimpleNamespace(kind='scalar', name='quadratic', func=f,
                            grad=f.gradient, hess=f.hessian, A=A, b=b,
-                           x0=np.zeros(n), x_star=np.linalg.solve(A, b), n=n)
-
+                           x0=np.zeros(n), x_opt=np.linalg.solve(A, b), n=n)
 
 def _rosenbrock_residual():
-    """0.5‖r‖² == rosenbrock(x) exactly, so least squares is comparable with the
-    scalar drivers on the same contour."""
     sb, sa = np.sqrt(200.0), np.sqrt(2.0)
 
     def r(x, *_, **__):
@@ -76,11 +52,11 @@ def _rosenbrock_residual():
     r.jacobian = r.gradient = jac
     return SimpleNamespace(kind='residual', name='rosenbrock_residual', func=r,
                            jac=jac, contour=rosenbrock, x0=np.array([1.2, 1.2]),
-                           x_star=np.ones(2), m=2, n=2)
+                           x_opt=np.ones(2), m=2, n=2)
 
 
 def _decay(m=40, theta=(2.5, 0.8, 0.5), noise=0.02, seed=0):
-    """y = A·exp(−k t) + c.  m ≫ n = 3 — the shape LM is actually for."""
+    """y = A·exp(−k t) + c.  m ≫ n = 3 to test Levenberg-Marquadt"""
     theta = np.asarray(theta, dtype=float)
     t = np.linspace(0.0, 6.0, m)
     model = lambda tt, th: th[0] * np.exp(-th[1] * tt) + th[2]
@@ -99,11 +75,11 @@ def _decay(m=40, theta=(2.5, 0.8, 0.5), noise=0.02, seed=0):
     r.jacobian = r.gradient = jac
     return SimpleNamespace(kind='residual', name='exp_decay', func=r, jac=jac,
                            t=t, y=y, model=model, contour=None,
-                           x0=np.array([1.0, 0.2, 0.0]), x_star=theta, m=m, n=3)
+                           x0=np.array([1.0, 0.2, 0.0]), x_opt=theta, m=m, n=3)
 
 
 def _hilbert(m=30, n=6, noise=1e-3, seed=0):
-    """Overdetermined and ill-conditioned: where QR/SVD beat the normal equations."""
+    """Overdetermined and ill-conditioned"""
     i, j = np.arange(m)[:, None], np.arange(n)[None, :]
     A = 1.0 / (i + j + 1.0)
     x_true = np.ones(n)
@@ -116,7 +92,7 @@ def _hilbert(m=30, n=6, noise=1e-3, seed=0):
     r.jacobian = r.gradient = lambda x, *_, **__: A
     return SimpleNamespace(kind='linear', name='hilbert', func=r, jac=r.jacobian,
                            A=A, b=b, x_true=x_true, x0=np.zeros(n), m=m, n=n,
-                           x_star=np.linalg.lstsq(A, b, rcond=None)[0])
+                           x_opt=np.linalg.lstsq(A, b, rcond=None)[0])
 
 
 PROBLEMS = {
@@ -127,8 +103,6 @@ PROBLEMS = {
     'hilbert': _hilbert,
 }
 
-
-# --------------------------------------------------------------------- drivers
 
 def run_line_search(p, solver='newton', method=backtracking, max_iter=500,
                     conv_tol=1e-5, solver_args=None, **kw):
@@ -177,9 +151,7 @@ def run_gauss_newton(p, subproblem='qr', method=backtracking, max_iter=200, **kw
                         max_iter=max_iter, **kw)
 
 
-# LM builds its step from (r, J). Only the QR subproblem consumes that pair;
-# cholesky needs (Jᵀr, JᵀJ) and dogleg silently produces a garbage step from it
-# (measured: 14 iterations, x never leaves x0, no error raised).
+
 LM_SUBPROBLEMS = ('qr', 'cholesky')
 
 
@@ -191,7 +163,7 @@ def run_lm(p, method='qr', rad0=1.0, max_iter=300, **kw):
         raise ValueError(
             f"levenberg_marquardt cannot use {key!r}: it passes (residual, Jacobian) "
             f"to the subproblem, which only {' / '.join(LM_SUBPROBLEMS)} accept. "
-            f"dogleg and cauchy_point read that pair as (g, B) and return nonsense.")
+        )
     return levenberg_marquardt(p.func, p.x0, jac=p.jac, loss_function='quadratic',
                                trust_region_method=TRUST_REGION_METHODS.get(key, method),
                                trust_region_args={'rad0': rad0},
@@ -204,7 +176,7 @@ def run_linear(p, solver='QR', max_iter=200, conv_tol=1e-8, **kw):
                                 conv_tol=conv_tol, max_iter=max_iter, **kw)
 
 
-DRIVERS = {
+OPTIMIZERS = {
     'line_search': SimpleNamespace(run=run_line_search, kinds=('scalar',)),
     'trust_region': SimpleNamespace(run=run_trust_region, kinds=('scalar',)),
     'cg': SimpleNamespace(run=run_cg, kinds=('scalar',)),
@@ -214,8 +186,7 @@ DRIVERS = {
     'linear': SimpleNamespace(run=run_linear, kinds=('linear',)),
 }
 
-# (driver, label, kwargs) triples for the full sweep
-SWEEP = [
+RUNS = [
     ('line_search', 'newton / backtracking', {'solver': 'newton'}),
     ('line_search', 'newton / wolfe', {'solver': 'newton', 'method': wolfe}),
     ('line_search', 'bfgs / backtracking', {'solver': 'bfgs', 'solver_args': {'inv': True}}),
@@ -234,25 +205,19 @@ SWEEP = [
     ('linear', 'direct / Cholesky', {'solver': 'Cholesky'}),
 ]
 
-
-# --------------------------------------------------------------------- running
-
 def _contour(p):
-    """Function to draw the contour against — residual problems borrow a scalar twin."""
     return getattr(p, 'contour', None) or (p.func if p.kind == 'scalar' else None)
 
-
-def run_one(driver, problem, label=None, display=False, plot=True, **kw):
+def run_one(optimizer, problem, label=None, display=False, plot=True, **kw):
     p = PROBLEMS[problem]() if isinstance(problem, str) else problem
-    d = DRIVERS[driver]
-    if p.kind not in d.kinds:
-        raise ValueError(f"{driver} takes {d.kinds} problems, {p.name} is {p.kind!r}")
-    res = d.run(p, **kw)
+    o = OPTIMIZERS[optimizer]
+    if p.kind not in o.kinds:
+        raise ValueError(f"{optimizer} takes {o.kinds} problems, {p.name} is {p.kind!r}")
+    res = o.run(p, **kw)
     report(res, func=_contour(p), func_name=p.name, display_all=display, plot=plot)
     return res
 
-
-def run_sweep(problem, display=False, plot=True):
+def run_all(problem, display=False, plot=True):
     p = PROBLEMS[problem]()
     print(f"\n{'#' * 72}\n# {p.name}   kind={p.kind}  n={p.n}  x0={p.x0}\n{'#' * 72}")
     if p.kind == 'linear':
@@ -261,32 +226,30 @@ def run_sweep(problem, display=False, plot=True):
         print(summarise_function(p.func, p.x0))
 
     results = {}
-    for driver, label, kw in SWEEP:
-        if p.kind not in DRIVERS[driver].kinds:
+    for optimizer, label, kw in RUNS:
+        if p.kind not in OPTIMIZERS[optimizer].kinds:
             continue
-        res = attempt(f"{p.name}: {label}", run_one, driver, p,
-                      display=display, plot=plot, **kw)
+        res = run_one(optimizer, p, display=display, plot=plot, **kw)
         if res is not None:
             results[label] = res
 
     print(f"\n--- {p.name} ---")
-    compare(results, x_star=getattr(p, 'x_star', None))
+    compare(results, x_opt=getattr(p, 'x_opt', None))
     return results
 
 
 def main(problems=None, display=False, plot=True, block=True):
     for name in (problems or PROBLEMS):
-        attempt(f"sweep: {name}", run_sweep, name, display=display, plot=plot)
+        run_all(name, display=display, plot=plot)
     if plot and block:
         plt.show(block=True)
 
-
 def cli():
-    ap = argparse.ArgumentParser(description="drive every presto optimizer")
+    ap = argparse.ArgumentParser(description="run every presto optimizer")
     ap.add_argument('--run', default='all',
-                    choices=['all', *DRIVERS], help="driver, or 'all' to sweep")
+                    choices=['all', *OPTIMIZERS], help="optimizer, or 'all'")
     ap.add_argument('--problem', default=None, choices=list(PROBLEMS),
-                    help='default: every problem the driver accepts')
+                    help='default: every problem the optimizer accepts')
     ap.add_argument('--x0', type=parse_x0, default=None)
     ap.add_argument('--max_iter', type=int, default=None)
     ap.add_argument('--display', action='store_true', help='print every iteration')
@@ -299,7 +262,7 @@ def cli():
              display=args.display, plot=plot)
         return
 
-    kinds = DRIVERS[args.run].kinds
+    kinds = OPTIMIZERS[args.run].kinds
     names = ([args.problem] if args.problem
              else [n for n, f in PROBLEMS.items() if f().kind in kinds])
     kw = {} if args.max_iter is None else {'max_iter': args.max_iter}
@@ -307,11 +270,9 @@ def cli():
         p = PROBLEMS[name]()
         if args.x0 is not None:
             p.x0 = args.x0
-        attempt(f"{name}: {args.run}", run_one, args.run, p,
-                display=args.display, plot=plot, **kw)
+        run_one(args.run, p, display=args.display, plot=plot, **kw)
     if plot:
         plt.show(block=True)
-
 
 if __name__ == '__main__':
     cli()
