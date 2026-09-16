@@ -599,12 +599,9 @@ def eigenvalues(A):
 
 
 def _is_strictly_diagonally_dominant(A):
-    #return np.diag(A) > _off_diagonal_sum(A)
-    abs_A = np.abs(A)
-    return np.sum(abs_A, axis=1) < 2*np.diag(abs_A)
+    return np.all(np.abs(np.diag(A)) > _off_diagonal_sum(A))
 
 def _off_diagonal_sum(A):
     A = np.array(A, dtype=float)
-    n = A.shape[0]
     return np.sum(np.abs(A), axis=1) - np.diag(np.abs(A))
 
