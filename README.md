@@ -2,7 +2,7 @@
 
 ## Numerical optimization in Python, following Nocedal & Wright
 
-Line search, trust region, conjugate gradient, least squares and quadratic programming.
+Line search, trust region, conjugate gradient, least squares and quadratic programming methods
 
 Allows for more configuration than SciPy. The descent direction, step-length, Hessian modification, 
 trust-region subproblem solver and the radius update thresholds are all separate arguments, and 
@@ -136,7 +136,7 @@ and `expand_condition` is a callable you can pass.
 specify a scaling matrix `D` to have elliptical trust regions.
 
 **Five β formulas for nonlinear CG** SciPy's `method='CG'` is tied to Polak–Ribière+ only. 
-In presto there are multiple choices for beta updates, along with the choice to specify restarts.
+In presto there are multiple choices for β updates, along with the choice to specify restarts.
 
 **Preconditioner constructors.** In presto you can choose how to construct the preconditioner from: 
 incomplete Cholesky, shifted incomplete Cholesky and SSOR.
