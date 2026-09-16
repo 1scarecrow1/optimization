@@ -26,10 +26,10 @@ def huber_loss(func, x, fx=None, delta=0.1, w=0.5):
     '''
     if fx is None:
         fx = func(x)
-    abs_fx = np.abs(fx)
-    return np.where(abs_fx <= delta, 
-             quadratic_loss(func, x, fx, c=w),
-             delta*(absolute_loss(func, x, fx, c=1.0) - (1-w)*delta))
+    abs_fx = np.atleast_1d(np.abs(fx))
+    small = abs_fx <= delta
+    return (quadratic_loss(func, x, abs_fx[small], c=w)
+            + delta*(absolute_loss(func, x, abs_fx[~small], c=1.0) - (1-w)*delta*np.count_nonzero(~small)))
 
 def zero_one_loss(y_act, y_pred):
     return np.where(y_act == y_pred, 0, 1)
