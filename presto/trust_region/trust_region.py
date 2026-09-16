@@ -2,8 +2,8 @@ from collections import namedtuple
 import numpy as np
 import warnings
 import scipy   
-from presto.linalg import l2_norm
-from scipy.linalg import cho_factor, cho_solve, solve_triangular, block_diag, givens_rotations
+from presto.linalg import l2_norm, givens_rotations
+from scipy.linalg import cho_factor, cho_solve, solve_triangular, block_diag
 from presto.least_squares.linear import qr_solve
 
 TrustRegionOutput = namedtuple("TrustRegionOutput", "p")
