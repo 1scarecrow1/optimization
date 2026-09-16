@@ -293,6 +293,16 @@ def svd(x):
     return np.sqrt(d), u, v
 
 
+def solve_quadratic(a, b, c):
+    '''
+    Solve ax^2 + bx + c = 0
+    '''
+    disc = b*b - 4*a*c
+    if disc < 0:
+        raise ValueError(f"no real root: discriminant {disc}")
+    q = -0.5 * (b + np.copysign(np.sqrt(disc), b))
+    r1, r2 = q / a, c / q
+    return max(r1, r2), min(r1, r2)
 def solve(A, b):
     if not is_square(A) or not is_PSD(A):
         b = A.T @ b

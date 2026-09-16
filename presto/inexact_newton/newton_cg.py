@@ -7,7 +7,6 @@ from presto.conjugate_gradient.conjugate_gradient import converged, fletcher_ree
 from presto.gradients import gradient_func, hessian_func
 from presto.linalg import inexact_modified_cholesky, l2_norm, inverse
 from presto.trust_region.newton_cg import cg_steihaug
-from presto.trust_region.trust_region import solve_quadratic
 from presto.utils import merge_args
 
 @dataclass
@@ -65,7 +64,7 @@ def minimize(func, x,
             p_cur = cg_line_search(g_cur, h_cur, tol_cur)
             _, x_cur, f_cur = line_search_func(x_cur=x_cur, f_cur=f_cur, g_cur=g_cur, p_cur=p_cur)
         else:
-            p_cur = cg_steihaug(g_cur, h_cur, rad_cur, tol_cur)
+            p_cur = cg_steihaug(g_cur, h_cur, rad_cur, tol_cur=tol_cur)
             p_cur = np.linalg.solve(L.T, p_cur)      # p = L⁻ᵀ p̂
             x_cur = x_cur + p_cur 
             f_cur = f(x_cur)

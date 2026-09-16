@@ -2,9 +2,10 @@ from collections import namedtuple
 import numpy as np
 import warnings
 import scipy   
-from presto.linalg import l2_norm, givens_rotations
+from presto.linalg import l2_norm, givens_rotations, solve_quadratic
 from scipy.linalg import cho_factor, cho_solve, solve_triangular, block_diag
 from presto.least_squares.linear import qr_solve
+from presto.trust_region.newton_cg import cg_steihaug
 
 TrustRegionOutput = namedtuple("TrustRegionOutput", "p")
 
@@ -360,23 +361,16 @@ def qr_trust_region_subproblem(r_cur, j_cur, rad_cur, D_cur=None, lamb_tol=1e-8,
 def check_convergence(g_cur, conv_tol=1e-4):   
     return l2_norm(g_cur) <= conv_tol 
 
-def solve_quadratic(a, b, c):
-    '''
-    Solve ax^2 + bx + c = 0
-    '''
-    disc = b*b - 4*a*c
-    if disc < 0:
-        raise ValueError(f"no real root: discriminant {disc}")
-    q = -0.5 * (b + np.copysign(np.sqrt(disc), b))
-    r1, r2 = q / a, c / q
-    return max(r1, r2), min(r1, r2)
 
 TRUST_REGION_METHODS = {
     'dogleg': dogleg,
     'cholesky': cholesky_trust_region_subproblem,
     'qr': qr_trust_region_subproblem,
     'cauchy_point': cauchy_point,
-    'generalised_cauchy': generalised_cauchy_point
+    'generalised_cauchy': generalised_cauchy_point,
+    'steihaug': cg_steihaug,
+    'cg_steihaug': cg_steihaug,
+    'cg steihaug': cg_steihaug
     }
 
 
