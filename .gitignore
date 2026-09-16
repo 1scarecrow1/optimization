@@ -1,0 +1,9 @@
+dev_utils/
+notebook.ipynb
+*.xlsx
+.vscode/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/

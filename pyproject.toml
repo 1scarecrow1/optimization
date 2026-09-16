@@ -6,12 +6,22 @@ build-backend = "setuptools.build_meta"
 name = "presto"
 version = "0.1.0"
 description = "Optimization routines"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "1scarecrow1" }
+]
 requires-python = ">=3.10"
 dependencies = [
     "numpy",
     "matplotlib",
     "scipy"
 ]
+
+[project.urls]
+Homepage = "https://github.com/1scarecrow1/optimization"
+Repository = "https://github.com/1scarecrow1/optimization"
+Issues = "https://github.com/1scarecrow1/optimization/issues"
 
 [tool.setuptools.packages.find]
 include = ["presto*"]
