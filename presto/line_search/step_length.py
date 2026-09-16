@@ -48,10 +48,10 @@ def safeguard_alpha(a, a_lo, a_hi, frac=0.1):
     lower = lo + frac * width
     upper = hi - frac * width
 
-    if not np.isfinite(a) or a <= lower or a >= upper:
+    if not np.isfinite(a):
         return bisection(a_lo, a_hi)
 
-    return a
+    return min(max(a, lower), upper)
 
 def cubic_interpolate(a_lo, a_hi, phi, phi_g, phi_lo=None, phi_hi=None):
     if phi_lo is None:
