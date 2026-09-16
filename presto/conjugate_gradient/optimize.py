@@ -1,9 +1,11 @@
 from functools import partial
+from dataclasses import dataclass
 import warnings 
 import numpy as np 
 from presto.linalg import * 
 from presto.conjugate_gradient.conjugate_gradient import *
 from presto.gradients import gradient_func
+from presto.line_search.line_search import LINE_SEARCH_METHODS
 from presto.utils import timer, resolve_func, merge_args
 from scipy.sparse.linalg import SuperLU
 from scipy.sparse import csc_array
@@ -81,7 +83,7 @@ def cg_solve_preconditioner(A, b, x, preconditioner=None, conv_tol=1e-5, max_ite
     if isinstance(C, SuperLU):
         D = C.U.diagonal()
         if np.any(D <= 0):
-            # incomplete Cholesky broke down -> A is not numerically PD
+            # incomplete Cholesky broke down => A is not numerically PD
             G = None
         else:
             G = (C.L @ diags(np.sqrt(D))).toarray()
@@ -148,7 +150,7 @@ def minimize(func, x,
 
     f = partial(func, **func_args)
     g = partial(gradient, **func_args) if not isinstance(gradient, partial) else gradient 
-    line_search = partial(line_search_method, func, **merge_args(func_args, line_search_args))
+    line_search = partial(resolve_func(line_search_method, LINE_SEARCH_METHODS, "line search"), func, **merge_args(func_args, line_search_args))
     conjugate_beta = resolve_func(conjugate_method, NONLINEAR_CG_BETAS, 'conjugate gradient methods', polak_ribiere)
 
     x_cur = np.asarray(x, dtype=float)

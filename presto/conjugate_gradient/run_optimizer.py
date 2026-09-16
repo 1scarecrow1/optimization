@@ -6,7 +6,7 @@ from presto.linalg import *
 from presto.conjugate_gradient.optimize import *
 import matplotlib.pyplot as plt
 from presto.utils import timer
-from presto.conjugate_gradient.plotting import * 
+from presto.plotting.conjugate_gradient import *
 from types import SimpleNamespace
 import argparse
 
@@ -77,7 +77,6 @@ def run_linear_cg():
         print(f'condition no. {condition_number(A)}')
         b = np.ones(n)
         x0 = np.zeros(n)
-        #res = cg_solve(A, b, x0, **optimizer_params)
         res = cg_solve(A, b, x0, preconditioning=True, preconditioner=incomplete_cholesky, **optimizer_params)
 
         M = res.preconditioner
@@ -101,7 +100,6 @@ def run_linear_cg():
         print(f'||Ax-b||: {l2_norm(A @ res.x - b)}')
         print(f'scipy solve: {scipy.linalg.solve(A, b)}')
 
-        #plot_cg_convergence(A, b, res)                        
         plot_cg_convergence(A, b, res, spectrum='preconditioned', spectrum_style='hist') # density histogram
 
 

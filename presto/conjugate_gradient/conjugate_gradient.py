@@ -24,9 +24,6 @@ def linear_cg(A, b, x, preconditioning=False, preconditioner=None):
     return x_cur  
 
 def linear_preconditioned_cg(A, b, x, preconditioner):
-    '''
-    Find good conditioning matrices
-    '''
     x_cur = x
     r_cur = A @ x_cur - b 
     lu = preconditioner(A) 
@@ -65,9 +62,6 @@ def linear_cg_iteration(A, x_cur, r_cur, p_cur, rr=None):
     return x_cur, r_cur, p_cur, rr_next
 
 def linear_preconditioned_cg_iteration(A, x_cur, r_cur, p_cur, y_cur, lu, ry=None):
-    '''
-    Find good conditioning matrices
-    '''
     c = A @ p_cur 
     d = p_cur @ c
     if ry is None:
@@ -85,9 +79,6 @@ def linear_preconditioned_cg_iteration(A, x_cur, r_cur, p_cur, y_cur, lu, ry=Non
     return x_cur, r_cur, p_cur, ry_next
 
 def nonlinear_cg(func, x, grad, line_search_method, beta):
-    '''
-    TODO: Add restart and check for p conjugate
-    '''
     x_cur = x
     f_cur = func(x_cur)
     g_cur = grad(x_cur)
@@ -131,12 +122,74 @@ def hager_zhang(g_cur, g_next, p_cur):
 def pos_beta(beta):
     return max(0, beta)
 
+def projected_cg(G, c, A, b, x, H=None, radius=None,
+                 conv_tol=1e-5, max_iter=None):
+    x_cur = x.copy()
+    n = x_cur.size
+
+    if H is None:
+        H = np.identity(n)
+
+    H_inv = np.linalg.solve(H, np.identity(n))
+
+    if A.shape[0]:
+        M = A @ H_inv @ A.T
+        P = H_inv - H_inv @ A.T @ np.linalg.solve(M, A @ H_inv)
+    else:
+        P = H_inv
+
+    r_cur = G @ x_cur + c
+    g_cur = P @ r_cur
+    d_cur = -g_cur
+    rg = r_cur @ g_cur
+    max_iter = n if max_iter is None else max_iter
+
+    for _ in range(max_iter):
+        if l2_norm(g_cur) <= conv_tol:
+            break
+
+        Gd = G @ d_cur
+        curvature = d_cur @ Gd
+        if curvature <= 0:
+            if radius is None:
+                return x_cur
+            a = d_cur @ d_cur
+            q = x_cur @ d_cur
+            disc = q*q - a * (x_cur @ x_cur - radius**2)
+            alpha = (-q + np.sqrt(max(disc, 0.0))) / a
+            return x_cur + alpha * d_cur
+        
+        alpha = rg / curvature
+        if radius is not None and l2_norm(x_cur + alpha*d_cur) >= radius:
+            a = d_cur @ d_cur
+            q = x_cur @ d_cur
+            disc = q*q - a * (x_cur @ x_cur - radius**2)
+            alpha = (-q + np.sqrt(max(disc, 0.0))) / a
+            return x_cur + alpha * d_cur
+        
+        x_cur = x_cur + alpha * d_cur
+        r_next = r_cur + alpha * Gd
+        g_next = P @ r_next
+        rg_next = r_next @ g_next
+
+        if l2_norm(g_next) <= conv_tol:
+            return x_cur
+        
+        beta = rg_next / rg
+        d_cur = -g_next + beta * d_cur
+        r_cur, g_cur, rg = r_next, g_next, rg_next
+
+    return x_cur
+
 def converged(x, conv_tol=1e-4):
     return l2_norm(x) < conv_tol
 
 CG_METHODS = {
     'cg': linear_cg,
-    'preconditioned cg': linear_preconditioned_cg
+    'preconditioned cg': linear_preconditioned_cg,
+    'projected cg': projected_cg,
+    'projected-cg': projected_cg,
+    'projected_cg': projected_cg
 }
 
 NONLINEAR_CG_BETAS = {
