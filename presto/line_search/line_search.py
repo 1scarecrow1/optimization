@@ -69,46 +69,7 @@ def wolfe(func, x_cur, f_cur, g_cur, p_cur, a0=1.0, a_prev=0.0, a_max=10.0, c1=1
 
     raise ValueError(f"Wolfe line search failed to satisfy strong Wolfe conditions in {max_iter} trials")
 
-def frank_wolfe(func, x0, grad, A, max_iter=150, disp=True, **func_args):
-    x = np.array(x0, dtype=float)
-    g = partial(grad, A, **func_args)
-    gx = g(x)
-    k = 0
-
-    while k < max_iter and not is_frank_wolfe_duality_gap_min(gx, x): 
-        s_min = np.argmin(gx) 
-        v = A @ x 
-        a = (x @ v - v[s_min]) / (x @ v - 2*v[s_min] + A[s_min, s_min])
-        #a = np.clip(a, 0, 1)      
-        #a = 2 / (k + 2)
-        x *= 1 - a 
-        x[s_min] += a
-        print({
-            "iteration" : k,
-            "a" : a,
-            "x": x})
-        #x /= np.sum(a) # renormalise??
-        gx = g(x)
-        k += 1
-
-    if disp:
-        res = {
-            'current function value': func(x, A, **func_args),
-            'num_iterations': k,
-            'current gradient value': gx,
-            'sum x': np.sum(x) 
-            }
-        print(res)
-
-    return x
-
-def is_frank_wolfe_duality_gap_min(g_cur, x_cur, eps=1e-6):
-    return g_cur @ x_cur - np.min(g_cur) <= eps
-
-def is_converged(gradient, eps=1e-4):
-    """
-    TODO: Use test_terminal_steepest_descent 
-    """      
+def is_converged(gradient, eps=1e-4):  
     return np.isclose(l2_norm(gradient), 0.0, atol=eps) 
 
 def bracket_zoom(f, g, x_cur, p_cur, suff_decrease, suff_curvature, a_lo, a_hi, max_iter, interp_method="cubic"): 
