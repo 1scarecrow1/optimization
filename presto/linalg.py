@@ -5,19 +5,6 @@ import scipy.sparse.linalg as sla
 from scipy.linalg import cho_factor, lu_factor, cho_solve, lu_solve
 from scipy.linalg.lapack import dlartg
 
-def ssor(A, omega=1.2):
-    '''
-    Symmetric successive overrelaxation of form A = L + D + L.T for symmetric PD A to solve Ax=b
-    '''
-    A = np.array(A)
-    d = np.diag(A)
-    L = np.tril(A, -1)
-    D = np.diag(d)
-    D_inv = np.diag(1.0 / d)
-    b = D + omega*L
-    return b @ D_inv @ b.T / (omega * (2-omega))
-
-
 def incomplete_LU(A, explicit=False, sparse_array=True):
     '''
     Incomplete LU factorisation of square matrix A
@@ -235,6 +222,18 @@ def ssor_preconditioner(A, omega=1.2):
 
     return sla.LinearOperator(A.shape, matvec=matvec)
 
+def ssor(A, omega=1.2):
+    '''
+    Symmetric successive overrelaxation of form A = L + D + L.T for symmetric PD A to solve Ax=b
+    '''
+    A = np.array(A)
+    d = np.diag(A)
+    L = np.tril(A, -1)
+    D = np.diag(d)
+    D_inv = np.diag(1.0 / d)
+    b = D + omega*L
+    return b @ D_inv @ b.T / (omega * (2-omega))
+    
 def inverse(x):
     x = np.array(x)
     nx = np.ndim(x)
