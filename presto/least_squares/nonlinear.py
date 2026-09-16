@@ -13,8 +13,10 @@ from presto.trust_region.trust_region import general, gauss_newton_model, qr_tru
 from presto.utils import resolve_func
 
 logger = logging.getLogger(__name__)
-###### Function supplied should be residual function 
-###### Create loss function to minimize based on supplied function and specified loss function
+
+###### Function supplied should be least squares residual 
+###### Objective function is scalar merit function - default is squared loss
+
 @dataclass
 class MinimizeResult:
     x: np.ndarray
